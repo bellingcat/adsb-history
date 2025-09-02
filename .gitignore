@@ -43,3 +43,5 @@ coverage
 .firebase
 .firebaserc
 
+*.pyc
+__pycache__/
