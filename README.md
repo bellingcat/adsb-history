@@ -1,10 +1,12 @@
 # ADS-B History
 
-A full-stack application for collecting, storing, and querying historical ADS-B aircraft tracking data. This system enables sophisticated spatial and temporal queries on aircraft positions, with support for filtering by geographic regions, altitude, speed, bearing, aircraft type, and more.
+A full-stack application for collecting, storing, and querying historical ADS-B aircraft tracking data. This system enables sophisticated spatial and temporal queries on aircraft positions, with support for filtering by geographic regions, altitude, speed, bearing, aircraft type and more.
 
 ![The search interface](docs/images/1.png)
 ![A graph of search results over time](docs/images/2.png)
 ![Results aggregated by aircraft](docs/images/3.png)
+
+For more information and background, see [the associated presentation at WHY2025](https://media.ccc.de/v/why2025-242-eye-on-the-sky-building-investigative-journalism-tools-for-analyzing-airplanes).
 
 ## Overview
 
