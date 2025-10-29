@@ -86,12 +86,6 @@ def verify_firebase_token(token):
         # Verify the token
         decoded_token = auth.verify_id_token(token)
         
-        # Check if the email domain is bellingcat.com
-        email = decoded_token.get('email', '')
-        if not email.endswith('@bellingcat.com'):
-            print(f"Access denied: Email domain not allowed: {email}")
-            return None
-            
         return decoded_token
     except Exception as e:
         print(f"Error verifying Firebase token: {e}")

@@ -20,7 +20,7 @@ onMounted(() => {
     <v-card class="auth-card mt-16">
       <v-card-title>Authentication Required</v-card-title>
       <v-card-text>
-        <p>Please sign in with your Bellingcat Google account to access the ADS-B History Search.</p>
+        <p>Please sign in with your Google account to access the ADS-B History Search.</p>
         <Auth />
       </v-card-text>
     </v-card>

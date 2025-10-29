@@ -19,11 +19,6 @@ const auth = getAuth(app);
 const db = getFirestore(app, 'searches');
 const googleProvider = new GoogleAuthProvider();
 
-// Configure Google provider to only allow bellingcat.com domain
-// googleProvider.setCustomParameters({
-//   hd: 'bellingcat.com'
-// });
-
 // Function to sign in with Google
 export const signInWithGoogle = async () => {
   try {

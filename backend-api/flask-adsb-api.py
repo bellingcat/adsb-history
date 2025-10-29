@@ -385,43 +385,6 @@ def get_by_bbox():
         logger.error(f"Error in /api/adsb/bbox from {email}: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/adsb/metadata', methods=['GET'])
-def get_metadata():
-    """
-    Get metadata about the ADS-B database including date range and record count
-    """
-    try:
-        # Log request with user email if authenticated
-        email = getattr(request, 'user', {}).get('email', 'unauthenticated')
-        logger.info(f"API Request from {email}: /api/adsb/metadata")
-        
-        conn = get_db_connection()
-        with conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                # Get date range and count
-                cur.execute("""
-                    SELECT 
-                        COUNT(*) as total_records,
-                        MIN(t) as earliest_record,
-                        MAX(t) as latest_record,
-                        COUNT(DISTINCT hex) as unique_aircraft
-                    FROM adsb
-                """)
-                stats = cur.fetchone()
-                
-                # Log the results
-                logger.info(f"Metadata query from {email} returned: {stats}")
-                
-                # Convert datetime objects to strings
-                stats['earliest_record'] = stats['earliest_record'].isoformat() if stats['earliest_record'] else None
-                stats['latest_record'] = stats['latest_record'].isoformat() if stats['latest_record'] else None
-                
-                return jsonify(stats)
-    
-    except Exception as e:
-        logger.error(f"Error in /api/adsb/metadata from {email}: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/adsb/intersect_bboxes', methods=['GET'])
 @require_firebase_auth
 @validate_params
