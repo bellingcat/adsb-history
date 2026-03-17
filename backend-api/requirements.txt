@@ -8,3 +8,4 @@ pandas
 numpy
 sqlalchemy
 requests
+Werkzeug==2.2.2

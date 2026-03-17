@@ -158,7 +158,7 @@ python process_adsb_data.py v2025.10.28-planes-readsb-prod-0/heatmap
 
 ```bash
 cd backend-api
-python flask-adsb-api.py
+FLASK_APP=flask-adsb-api.py flask run
 ```
 
 The API will start on `http://localhost:5000` by default.
