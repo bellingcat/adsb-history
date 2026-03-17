@@ -64,60 +64,15 @@ pip install -r requirements.txt
 
 **Database Setup:**
 
-```sql
--- Create database
-CREATE DATABASE adsb;
+Run the [setup_db.sql](./backend-data-loading/setup_db.sql) script.
 
--- Enable PostGIS
-CREATE EXTENSION postgis;
+If you're using the `psql` tool, you can invoke the script with
 
--- Create main table
-CREATE TABLE adsb (
-    t TIMESTAMP WITH TIME ZONE,
-    hex TEXT,
-    flight TEXT,
-    alt BIGINT,
-    gs DOUBLE PRECISION,
-    geom GEOMETRY(Point, 4326),
-    bearing DOUBLE PRECISION,
-    registration TEXT,
-    typecode TEXT,
-    category TEXT,
-    military BOOLEAN
-);
-
--- Create temporary loading table
-CREATE TABLE adsb_temp (
-    t DOUBLE PRECISION,
-    hex TEXT,
-    flight TEXT,
-    squawk TEXT,
-    lat DOUBLE PRECISION,
-    lon DOUBLE PRECISION,
-    alt BIGINT,
-    gs DOUBLE PRECISION,
-    type INTEGER
-);
-
--- Create modes table for aircraft metadata
-CREATE TABLE modes (
-    hex TEXT PRIMARY KEY,
-    registration TEXT,
-    typecode TEXT,
-    category TEXT,
-    military BOOLEAN,
-    owner TEXT,
-    aircraft TEXT
-);
-
-COPY modes FROM 'modes.csv' DELIMITER ',' CSV HEADER;
-
--- Create indexes
-CREATE INDEX adsb_t_idx ON adsb (t);
-CREATE INDEX adsb_hex_idx ON adsb (hex);
-CREATE INDEX adsb_geom_idx ON adsb USING GIST (geom);
-CREATE INDEX adsb_category_idx ON adsb (category);
+```bash
+psql --file=setup_db.sql
 ```
+
+Alternatively, you can just copy paste the contents in whatever tool you're using.
 
 ### 2. Backend API
 
