@@ -10,6 +10,7 @@ import argparse
 import csv
 import datetime
 import glob
+import gzip
 import os
 import time
 from io import StringIO
@@ -80,7 +81,15 @@ def parse_binary_file(file_path):
     
     try:
         # Load binary file into int32 array
-        points = np.fromfile(file_path, dtype=np.int32)
+
+        # adsblol artifacts are gzipped files with a specific file extension
+        if file_path.endswith(".bin.ttf"):
+            with gzip.open(file_path, "rb") as f:
+                points = np.frombuffer(f.read(), dtype=np.int32)
+        # alternatively, the user might have done the unpacking manually.
+        # assume that's the case if the file extension is gone
+        else:
+            points = np.fromfile(file_path, dtype=np.int32)
         
         if len(points) == 0:
             logger.warning(f"Empty file: {file_path}")
@@ -256,8 +265,8 @@ def process_directory(directory_path, engine, cleanup_files=False):
         # Filter to numeric files only
         numeric_files = []
         for file_path in files:
-            filename = os.path.basename(file_path)
-            if filename.isdigit() and 0 <= int(filename) <= 47:
+            file_number = _numeric_stem(file_path)
+            if file_number is not None and file_number <= 47:
                 numeric_files.append(file_path)
         
         if not numeric_files:
@@ -265,7 +274,7 @@ def process_directory(directory_path, engine, cleanup_files=False):
             continue
         
         # Sort files by numeric value
-        numeric_files.sort(key=lambda x: int(os.path.basename(x)))
+        numeric_files.sort(key=lambda x: os.path.basename(x))
         
         for file_path in numeric_files:
             data = parse_binary_file(file_path)
@@ -301,6 +310,15 @@ def process_directory(directory_path, engine, cleanup_files=False):
                 logger.error(f"Failed to delete {file_path}: {e}")
     
     return total_records
+
+def _numeric_stem(path: str) -> int | None:
+    """
+    Given a path to a file, return the stem (i.e. the part without extension) of the file name,
+    parsed as an integer.
+    """
+    file_path = os.path.basename(path)
+    stem = file_path.split(".")[0]
+    return int(stem) if stem.isdigit() else None
 
 
 def create_indexes_and_finalize(engine):
