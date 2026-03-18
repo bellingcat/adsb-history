@@ -51,7 +51,7 @@ The `modes` table provides additional aircraft metadata based on ICAO hex codes.
 ### Frontend
 - Node.js (v16+)
 - npm or yarn
-- Firebase project (matching backend)
+- Firebase app (matching backend)
 
 ## Installation
 
@@ -64,60 +64,15 @@ pip install -r requirements.txt
 
 **Database Setup:**
 
-```sql
--- Create database
-CREATE DATABASE adsb;
+Run the [setup_db.sql](./backend-data-loading/setup_db.sql) script.
 
--- Enable PostGIS
-CREATE EXTENSION postgis;
+If you're using the `psql` tool, you can invoke the script with
 
--- Create main table
-CREATE TABLE adsb (
-    t TIMESTAMP WITH TIME ZONE,
-    hex TEXT,
-    flight TEXT,
-    alt BIGINT,
-    gs DOUBLE PRECISION,
-    geom GEOMETRY(Point, 4326),
-    bearing DOUBLE PRECISION,
-    registration TEXT,
-    typecode TEXT,
-    category TEXT,
-    military BOOLEAN
-);
-
--- Create temporary loading table
-CREATE TABLE adsb_temp (
-    t DOUBLE PRECISION,
-    hex TEXT,
-    flight TEXT,
-    squawk TEXT,
-    lat DOUBLE PRECISION,
-    lon DOUBLE PRECISION,
-    alt BIGINT,
-    gs DOUBLE PRECISION,
-    type INTEGER
-);
-
--- Create modes table for aircraft metadata
-CREATE TABLE modes (
-    hex TEXT PRIMARY KEY,
-    registration TEXT,
-    typecode TEXT,
-    category TEXT,
-    military BOOLEAN,
-    owner TEXT,
-    aircraft TEXT
-);
-
-COPY modes FROM 'modes.csv' DELIMITER ',' CSV HEADER;
-
--- Create indexes
-CREATE INDEX adsb_t_idx ON adsb (t);
-CREATE INDEX adsb_hex_idx ON adsb (hex);
-CREATE INDEX adsb_geom_idx ON adsb USING GIST (geom);
-CREATE INDEX adsb_category_idx ON adsb (category);
+```bash
+psql --file=setup_db.sql
 ```
+
+Alternatively, you can just copy paste the contents in whatever tool you're using.
 
 ### 2. Backend API
 
@@ -128,22 +83,9 @@ pip install -r requirements.txt
 
 **Environment Variables:**
 
-Create a `.env` file in `backend-api/`:
-
-```env
-# Database Configuration
-DB_HOST=localhost
-DB_NAME=adsb
-DB_USER=your_db_user
-DB_PASS=your_db_password
-DB_PORT=5432
-
-# Firebase Configuration
-FIREBASE_PROJECT_ID=your-firebase-project-id
-
-# Logging
-LOG_FILE=adsb_api.log
-```
+Create a `.env` file in `backend-api/`.
+Copy [.env.example](./backend-api/.env.example) and update it with your
+settings.
 
 **Firebase Setup:**
 
@@ -151,6 +93,7 @@ LOG_FILE=adsb_api.log
 2. Enable Authentication (Email/Password, Google, etc.)
 3. Download service account credentials JSON
 4. Place credentials in `backend-api/` directory (referenced in `firebase_utils.py`)
+5. Create a firebase web app in the firebase project.
 
 ### 3. Frontend
 
@@ -161,7 +104,7 @@ npm install
 
 **Firebase Configuration:**
 
-Update `frontend/src/firebase.js` with your Firebase project credentials:
+Update `frontend/src/firebase.js` with your Firebase app credentials:
 
 ```javascript
 const firebaseConfig = {
@@ -203,7 +146,7 @@ python process_adsb_data.py v2025.10.28-planes-readsb-prod-0/heatmap
 
 ```bash
 cd backend-api
-python flask-adsb-api.py
+FLASK_APP=flask-adsb-api.py flask run
 ```
 
 The API will start on `http://localhost:5000` by default.
