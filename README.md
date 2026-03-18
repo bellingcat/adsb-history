@@ -51,7 +51,7 @@ The `modes` table provides additional aircraft metadata based on ICAO hex codes.
 ### Frontend
 - Node.js (v16+)
 - npm or yarn
-- Firebase project (matching backend)
+- Firebase app (matching backend)
 
 ## Installation
 
@@ -83,22 +83,9 @@ pip install -r requirements.txt
 
 **Environment Variables:**
 
-Create a `.env` file in `backend-api/`:
-
-```env
-# Database Configuration
-DB_HOST=localhost
-DB_NAME=adsb
-DB_USER=your_db_user
-DB_PASS=your_db_password
-DB_PORT=5432
-
-# Firebase Configuration
-FIREBASE_PROJECT_ID=your-firebase-project-id
-
-# Logging
-LOG_FILE=adsb_api.log
-```
+Create a `.env` file in `backend-api/`.
+Copy [.env.example](./backend-api/.env.example) and update it with your
+settings.
 
 **Firebase Setup:**
 
@@ -106,6 +93,7 @@ LOG_FILE=adsb_api.log
 2. Enable Authentication (Email/Password, Google, etc.)
 3. Download service account credentials JSON
 4. Place credentials in `backend-api/` directory (referenced in `firebase_utils.py`)
+5. Create a firebase web app in the firebase project.
 
 ### 3. Frontend
 
@@ -116,7 +104,7 @@ npm install
 
 **Firebase Configuration:**
 
-Update `frontend/src/firebase.js` with your Firebase project credentials:
+Update `frontend/src/firebase.js` with your Firebase app credentials:
 
 ```javascript
 const firebaseConfig = {
