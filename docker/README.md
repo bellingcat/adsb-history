@@ -1,125 +1,150 @@
 # Docker — Turnstone ADS-B History
 
-Run the full stack with **all data under the repo `data/` folder**. Restarts use existing data (no re-download; DB and backups persist).
+Run the app with **everything under the repo `data/` directory**. Restarts reuse that data (no automatic re-download; Postgres and backups persist).
 
-**URLs:** Frontend → http://localhost:8080 · API → http://localhost:5000
+| | URL |
+|--|-----|
+| Frontend | http://localhost:8080 |
+| API | http://localhost:5000 |
+
+**In this doc:** [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [`data/` layout](#data-directory-layout) · [Download script](#globe_history-download-script) · [Environment](#environment-variables) · [Local Postgres](#local-postgres) · [External Postgres](#external-postgres) · [Manual extract](#manual-archive-extract)
 
 ---
 
 ## Prerequisites
 
-- Docker (Compose v2)
-- **curl** and **jq** (for the download script)
-- From repo root: `cp docker/.env.example docker/.env`
+- Docker with Compose v2
+- **curl** and **jq** (heatmap download script)
 
 ---
 
 ## Quick start
 
-### 1. Get heatmap data
+All commands assume **repository root** as the working directory.
 
-```bash
-mkdir -p data
-./scripts/download-globe-history.sh data
-```
+1. **Environment**
 
-From an **interactive terminal**, the script fetches the [globe_history](https://github.com/adsblol/globe_history/releases) release list (paginated; needs **curl** and **jq**), shows **prod-only** builds (tag contains `-planes-readsb-prod-`), and prompts for what to download:
+   ```bash
+   cp docker/.env.example docker/.env
+   ```
 
-- **Indices** (newest = 1): `3`, `1,4,6`, or range `5-10`
-- **One day:** `2026.04.15`
-- **Date range:** `2026.04.10..2026.04.15` or `2026.04.10-2026.04.15`
-- **Empty** at the prompt → latest prod only
+2. **Heatmap files** — run the download script (see [Globe_history download script](#globe_history-download-script) for options):
 
-You can combine comma-separated tokens. Each chosen release is extracted under `data/<RELEASE_DIR>/` (directory name matches the GitHub tag stem, e.g. `v2026.04.15-planes-readsb-prod-0`). Use that path as **RELEASE_DIR** for the loader below (repeat `data-loading` per release if you downloaded several).
+   ```bash
+   mkdir -p data
+   ./scripts/download-globe-history.sh data
+   ```
 
-**Non-interactive** (piped stdin or no TTY): downloads the **latest prod** release only—useful for scripts/CI.
+   Note the extracted directory name under `data/` (e.g. `v2026.04.15-planes-readsb-prod-0`). Use it as `RELEASE_DIR` in the next step.
 
-### 2. Choose database: local or external
+3. **Stack** (local Postgres — default):
 
-| Use case | Start stack | Load heatmap |
-|----------|-------------|--------------|
-| **Local Postgres** (default) | `docker compose -f docker/docker-compose.yml up -d` | `docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap` |
-| **External DB** (`DATABASE_URL` in `docker/.env`) | See [External database](#external-database) | Same `run --rm data-loading /data/RELEASE_DIR/heatmap` with external compose (see below) |
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d
+   ```
 
-**Example** (local Postgres, release dir `v2026.04.15-planes-readsb-prod-0`):
+4. **Load heatmap** (replace `RELEASE_DIR`):
 
-```bash
-docker compose -f docker/docker-compose.yml up -d
-docker compose -f docker/docker-compose.yml run --rm data-loading /data/v2026.04.15-planes-readsb-prod-0/heatmap
-```
+   ```bash
+   docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap
+   ```
 
-Paths for the loader are **inside the container**: host `data/` is mounted at `/data`, so use `/data/RELEASE_DIR/heatmap`, not `data/RELEASE_DIR/heatmap`.
+Loader paths are **inside the container**: host `data/` is mounted at `/data`, so use `/data/...`, not `data/...`.
+
+For **external Postgres**, use the steps in [External Postgres](#external-postgres) instead of steps 3–4 as written above.
 
 ---
 
-## Data folder
-
-Everything persistent lives under **`data/`** (one place to back up or move):
+## Data directory layout
 
 | Path | Purpose |
 |------|--------|
-| `data/<RELEASE_DIR>/` | Extracted globe_history (e.g. `heatmap/` with `00.bin.ttf` … `47.bin.ttf`) |
-| `data/pgdata/` | Postgres data (created on first run with local Postgres) |
+| `data/<RELEASE_DIR>/` | Extracted [globe_history](https://github.com/adsblol/globe_history/releases) tree (includes `heatmap/` with tile binaries) |
+| `data/pgdata/` | Local Postgres data (created on first run when using the default compose file) |
 | `data/modes.csv` | Optional aircraft metadata (7- or 11-column CSV) |
-| `data/firebase-key.json` | Optional; only if using Firebase auth (use `-f docker/docker-compose.firebase.yml`) |
-| `data/query-history-backup.json` | Optional; local query history backup |
+| `data/firebase-key.json` | Optional; required only with Firebase auth (`docker-compose.firebase.yml`) |
+| `data/query-history-backup.json` | Optional API query-history backup |
 
 ---
 
-## Environment
+## Globe_history download script
 
-Compose uses **`docker/.env`** (copy from `docker/.env.example`). Main variables:
+Script: `./scripts/download-globe-history.sh [DATA_DIR]` (default `DATA_DIR` is `data`).
 
-| Variable | Purpose |
-|----------|--------|
-| `POSTGRES_*` | Local Postgres (user, password, db, port) |
-| `DB_*` | API DB connection (defaults work for Docker) |
-| `DATABASE_URL` | If set, API and data-loading use this instead of `DB_*`; use with [external DB](#external-database) |
-| `DISABLE_AUTH`, `VITE_DISABLE_AUTH` | Set to `0` to enable Firebase; add `-f docker/docker-compose.firebase.yml` and ensure `data/firebase-key.json` exists |
-| `VITE_API_BASE_URL` | API URL seen by the browser (default `http://localhost:5000`) |
-| `QUERY_HISTORY_BACKUP_PATH` | Path inside API container for backup file |
+Source: [adsblol/globe_history releases](https://github.com/adsblol/globe_history/releases) — split archives (`.tar.aa`, `.tar.ab`, …).
+
+**Interactive terminal:** fetches the full release list (paginated API), shows **prod-only** tags (`-planes-readsb-prod-`), then prompts for a selection:
+
+| Input | Meaning |
+|-------|--------|
+| Index (newest = `1`) | e.g. `3`, `1,4,6`, or range `5-10` |
+| One day | e.g. `2026.04.15` |
+| Inclusive range | `2026.04.10..2026.04.15` or `2026.04.10-2026.04.15` |
+| Empty line | Latest prod only |
+
+Comma-separated tokens can be mixed (e.g. `1,2026.04.14,5-7`). Each chosen release is extracted to `data/<RELEASE_DIR>/`. Run `data-loading` once per release if you downloaded several.
+
+**Non-interactive** (no TTY / piped stdin): downloads the **latest prod** release only (CI-friendly).
 
 ---
 
-## Loading heatmap data
+## Environment variables
 
-- **Default:** `docker compose -f docker/docker-compose.yml run --rm data-loading` processes `/data` (all under `data/`).
-- **Single release:** `... run --rm data-loading /data/RELEASE_DIR/heatmap`
+Compose reads **`docker/.env`** (from `docker/.env.example`). Common entries:
 
-Heatmap source: [globe_history](https://github.com/adsblol/globe_history/releases) (split tar: `.tar.aa`, `.tar.ab`, …). The loader accepts the **heatmap** subfolder (files `0`–`47` or `00.bin.ttf`–`47.bin.ttf`).
+| Variable | Role |
+|----------|------|
+| `POSTGRES_*` | Local Postgres user, password, database, port |
+| `DB_*` | API database connection (defaults match Docker networking) |
+| `DATABASE_URL` | If set, API and `data-loading` prefer this over `DB_*` — see [External Postgres](#external-postgres) |
+| `DISABLE_AUTH`, `VITE_DISABLE_AUTH` | Set to `0` to enable Firebase; add `docker-compose.firebase.yml` and `data/firebase-key.json` |
+| `VITE_API_BASE_URL` | Browser-visible API URL (default `http://localhost:5000`) |
+| `QUERY_HISTORY_BACKUP_PATH` | Query-history backup path inside the API container |
 
-**Manual extract:** download split parts from the [releases](https://github.com/adsblol/globe_history/releases) page, then:
+---
+
+## Local Postgres
+
+**Start:**
 
 ```bash
-mkdir -p data/<release-dir>
-cat v*.tar.aa v*.tar.ab | tar -xf - -C data/<release-dir>
-docker compose -f docker/docker-compose.yml run --rm data-loading /data/<release-dir>/heatmap
+docker compose -f docker/docker-compose.yml up -d
 ```
+
+**Load heatmap:**
+
+- Entire `data/` tree:  `docker compose -f docker/docker-compose.yml run --rm data-loading`
+- One release only:  
+  `docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap`
+
+The loader expects the **`heatmap`** subdirectory (files `0`–`47` or `00.bin.ttf`–`47.bin.ttf`).
 
 ---
 
-## External database
+## External Postgres
 
-Use your own Postgres (e.g. cloud or host). No local Postgres container is run; API and data-loading use **`DATABASE_URL`** from `docker/.env`.
+Use your own Postgres (hosted or local). The default Postgres service is not used; **`DATABASE_URL`** in `docker/.env` drives the API and `data-loading`.
 
-1. **Set `DATABASE_URL`** in `docker/.env`, e.g.  
-   `DATABASE_URL=postgresql://user:password@host:5432/adsb`
+1. Set `DATABASE_URL`, for example:  
+   `postgresql://user:password@host:5432/adsb`
 
-2. **Create schema and optional modes** (once, idempotent):
+2. **PostGIS** is required (e.g. `brew install postgis` or your distro’s PostGIS package).
+
+3. Initialize schema (idempotent, once):
 
    ```bash
    ./scripts/init-external-db.sh
    ```
 
-   The script uses `docker/.env` if `DATABASE_URL` is not already set. Your DB must have **PostGIS** (e.g. `brew install postgis` or `apt install postgresql-16-postgis-3`).
+   The script reads `docker/.env` when `DATABASE_URL` is not already in the environment.
 
-3. **Start stack with external-DB override:**
+4. Start the stack with the external-DB override:
 
    ```bash
    docker compose -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml up -d
    ```
 
-4. **Load heatmap** (paths as in [Loading heatmap data](#loading-heatmap-data)):
+5. Load heatmap:
 
    ```bash
    docker compose -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml run --rm data-loading /data/RELEASE_DIR/heatmap
@@ -127,8 +152,25 @@ Use your own Postgres (e.g. cloud or host). No local Postgres container is run; 
 
 ---
 
-## Summary
+## Manual archive extract
 
-- **One data dir:** `data/` for heatmap, Postgres (`data/pgdata/`), modes, Firebase key, query-history backup.
-- **Restart:** `docker compose -f docker/docker-compose.yml up -d` (or with `-f docker/docker-compose.external-db.yml` if using external DB; add `-f docker/docker-compose.firebase.yml` if using Firebase auth).
-- **New heatmap:** run the data-loading container pointing at `/data/<path>/heatmap` as above.
+If you download split `.tar.*` parts from GitHub by hand:
+
+```bash
+mkdir -p data/<release-dir>
+cat v*.tar.aa v*.tar.ab | tar -xf - -C data/<release-dir>
+docker compose -f docker/docker-compose.yml run --rm data-loading /data/<release-dir>/heatmap
+```
+
+Adjust the final `docker compose` line if you use the external-DB compose files.
+
+---
+
+## Cheat sheet
+
+- **One data root:** `data/` for heatmap extracts, optional `modes.csv`, Firebase key, query backup, and local Postgres (`data/pgdata/`).
+- **Default restart:**  
+  `docker compose -f docker/docker-compose.yml up -d`
+- **With external DB:** add `-f docker/docker-compose.external-db.yml`.
+- **With Firebase auth:** add `-f docker/docker-compose.firebase.yml` and configure `data/firebase-key.json`.
+- **New heatmap:** extract under `data/`, then `run --rm data-loading /data/<dir>/heatmap`.
