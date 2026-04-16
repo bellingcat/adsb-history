@@ -35,7 +35,7 @@ All commands assume **repository root** as the working directory.
    ./scripts/download-globe-history.sh data
    ```
 
-   Note the extracted directory name under `data/` (e.g. `v2026.04.15-planes-readsb-prod-0`). Use it as `RELEASE_DIR` in the next step.
+   You can select **one or many** releases; each extract lands in `data/<RELEASE_DIR>/` with a `heatmap/` folder inside.
 
 3. **Stack** (local Postgres — default):
 
@@ -43,13 +43,21 @@ All commands assume **repository root** as the working directory.
    docker compose -f docker/docker-compose.yml up -d
    ```
 
-4. **Load heatmap** (replace `RELEASE_DIR`):
+4. **Load heatmap** — the `data-loading` service uses Compose **`tools`** profile (pass `--profile tools`). Paths below are **inside the container** (`data/` on the host is `/data`).
+
+   **Bulk — all releases that have heatmap data under `data/`** (every `data/*/heatmap` with tiles; `data/pgdata` is ignored):
 
    ```bash
-   docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap
+   docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading
    ```
 
-Loader paths are **inside the container**: host `data/` is mounted at `/data`, so use `/data/...`, not `data/...`.
+   The default command is `process_adsb_data.py /data`, which discovers those heatmap roots and loads them in **one** run (single finalize into `adsb`).
+
+   **Single release only** (replace `RELEASE_DIR` with the directory name under `data/`, e.g. `v2026.04.15-planes-readsb-prod-0`):
+
+   ```bash
+   docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap
+   ```
 
 For **external Postgres**, use the steps in [External Postgres](#external-postgres) instead of steps 3–4 as written above.
 
@@ -82,7 +90,7 @@ Source: [adsblol/globe_history releases](https://github.com/adsblol/globe_histor
 | Inclusive range | `2026.04.10..2026.04.15` or `2026.04.10-2026.04.15` |
 | Empty line | Latest prod only |
 
-Comma-separated tokens can be mixed (e.g. `1,2026.04.14,5-7`). Each chosen release is extracted to `data/<RELEASE_DIR>/`. Load all of them with one bulk `data-loading` run (default `/data`), or point the loader at a single `/data/<RELEASE_DIR>/heatmap`.
+Comma-separated tokens can be mixed (e.g. `1,2026.04.14,5-7`). Each chosen release is extracted to `data/<RELEASE_DIR>/`. Load all of them with one bulk run: `docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading` (default `/data` in the container), or point the loader at a single `/data/<RELEASE_DIR>/heatmap`.
 
 **Non-interactive** (no TTY / piped stdin): downloads the **latest prod** release only (CI-friendly).
 
@@ -111,12 +119,19 @@ Compose reads **`docker/.env`** (from `docker/.env.example`). Common entries:
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-**Load heatmap:**
+**Load heatmap** (`--profile tools` required):
 
-- **All releases under `data/`** (every `data/*/heatmap` that contains data; `data/pgdata` is skipped):  
-  `docker compose -f docker/docker-compose.yml run --rm data-loading`
-- **One release:**  
-  `docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap`
+1. **Bulk** — all `data/*/heatmap` trees that contain data:
+
+   ```bash
+   docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading
+   ```
+
+2. **One release:**
+
+   ```bash
+   docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap
+   ```
 
 The loader expects each heatmap tree under **`heatmap/`** (per-day folders or flat files `0`–`47` / `00.bin.ttf`–`47.bin.ttf`).
 
@@ -145,10 +160,18 @@ Use your own Postgres (hosted or local). The default Postgres service is not use
    docker compose -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml up -d
    ```
 
-5. Load heatmap:
+5. Load heatmap (`--profile tools` required):
+
+   **Bulk** (all heatmaps under `data/`):
 
    ```bash
-   docker compose -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml run --rm data-loading /data/RELEASE_DIR/heatmap
+   docker compose --profile tools -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml run --rm data-loading
+   ```
+
+   **One release:**
+
+   ```bash
+   docker compose --profile tools -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml run --rm data-loading /data/RELEASE_DIR/heatmap
    ```
 
 ---
@@ -160,10 +183,13 @@ If you download split `.tar.*` parts from GitHub by hand:
 ```bash
 mkdir -p data/<release-dir>
 cat v*.tar.aa v*.tar.ab | tar -xf - -C data/<release-dir>
-docker compose -f docker/docker-compose.yml run --rm data-loading /data/<release-dir>/heatmap
+# One extract:
+docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading /data/<release-dir>/heatmap
+# Or, if you already have several releases under data/, load all at once:
+docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading
 ```
 
-Adjust the final `docker compose` line if you use the external-DB compose files.
+Adjust the `docker compose` lines if you use the external-DB compose files (`-f docker/docker-compose.external-db.yml`).
 
 ---
 
@@ -174,4 +200,4 @@ Adjust the final `docker compose` line if you use the external-DB compose files.
   `docker compose -f docker/docker-compose.yml up -d`
 - **With external DB:** add `-f docker/docker-compose.external-db.yml`.
 - **With Firebase auth:** add `-f docker/docker-compose.firebase.yml` and configure `data/firebase-key.json`.
-- **New heatmap:** extract under `data/`, then either bulk `run --rm data-loading` or one release: `run --rm data-loading /data/<dir>/heatmap`.
+- **New heatmap:** extract under `data/`, then bulk: `docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading`, or one release: `docker compose --profile tools -f docker/docker-compose.yml run --rm data-loading /data/<dir>/heatmap`.
