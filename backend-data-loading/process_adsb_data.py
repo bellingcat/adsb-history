@@ -12,6 +12,7 @@ import datetime
 import glob
 import gzip
 import os
+import re
 import time
 from io import BytesIO, StringIO
 import pandas as pd
@@ -240,24 +241,28 @@ def slot_from_path(path):
 
 
 def find_date_subdirs(directory_path):
-    """Immediate subdirs named YYYY-MM-DD or YYYY.MM.DD; sorted paths."""
+    """Immediate subdirs named YYYY-MM-DD, YYYY.MM.DD, YYYY_MM_DD, or YYYYMMDD; sorted paths."""
     date_dirs = []
     for item in os.listdir(directory_path):
         item_path = os.path.join(directory_path, item)
         if not os.path.isdir(item_path):
             continue
-        if len(item) == 10 and item.count('-') == 2:
+        ok = False
+        if re.fullmatch(r'\d{4}[-._]\d{2}[-._]\d{2}', item):
+            normalized = item.replace('.', '-').replace('_', '-')
             try:
-                datetime.datetime.strptime(item, '%Y-%m-%d')
-                date_dirs.append(item_path)
+                datetime.datetime.strptime(normalized, '%Y-%m-%d')
+                ok = True
             except ValueError:
                 pass
-        elif len(item) == 10 and item.count('.') == 2:
+        elif re.fullmatch(r'\d{8}', item):
             try:
-                datetime.datetime.strptime(item, '%Y.%m.%d')
-                date_dirs.append(item_path)
+                datetime.datetime.strptime(item, '%Y%m%d')
+                ok = True
             except ValueError:
                 pass
+        if ok:
+            date_dirs.append(item_path)
     return sorted(date_dirs)
 
 
@@ -300,10 +305,22 @@ def heatmap_has_processable_files(directory_path):
     return False
 
 
+def _heatmap_root_candidates(release_tree_root):
+    """Paths where globe_history / tar1090 store the heatmap for one extracted tree."""
+    out = []
+    direct = os.path.join(release_tree_root, 'heatmap')
+    if os.path.isdir(direct):
+        out.append(direct)
+    legacy = os.path.join(release_tree_root, 'var', 'globe_history', 'heatmap')
+    if os.path.isdir(legacy):
+        out.append(legacy)
+    return out
+
+
 def discover_heatmap_roots(base_path):
     """
     If base_path is itself a heatmap dir (or contains heatmap data directly), return [base_path].
-    Otherwise scan one level of children for <child>/heatmap with data (bulk layout under data/).
+    Otherwise scan one level of children for heatmap trees (bulk layout under data/).
     """
     if not os.path.isdir(base_path):
         return []
@@ -316,10 +333,14 @@ def discover_heatmap_roots(base_path):
         child = os.path.join(base_path, name)
         if not os.path.isdir(child):
             continue
-        hm = os.path.join(child, 'heatmap')
-        if os.path.isdir(hm) and heatmap_has_processable_files(hm):
-            roots.append(hm)
-    return roots
+        # e.g. data/heatmap/... or release tarball with heatmap at top level
+        if name == 'heatmap' and heatmap_has_processable_files(child):
+            roots.append(child)
+            continue
+        for hm in _heatmap_root_candidates(child):
+            if heatmap_has_processable_files(hm):
+                roots.append(hm)
+    return list(dict.fromkeys(roots))
 
 
 def process_directory(directory_path, engine, cleanup_files=False):
