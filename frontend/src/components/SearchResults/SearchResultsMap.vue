@@ -461,10 +461,27 @@ const boundingBoxesGeoJSON = computed(() => {
 const addPlaneIcons = (mapWrapper) => {
   const map = mapWrapper.map;
 
+  // These icons face North (up) in their PNG files; rotate +90° so they face East like the rest
+  const NORTH_FACING_SLUGS = new Set([
+    'uav', 'helicopter', 'transport', 'glider', 'amphibian', 'gyrocopter',
+    'fighter', 'general-aviation','airliner',
+  ]);
+
   const loadImage = (url) =>
     new Promise((resolve, reject) => {
       map.loadImage(url, (err, image) => (err ? reject(err) : resolve(image)));
     });
+
+  const rotateImage90CW = (image) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.height;
+    canvas.height = image.width;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(image, -image.width / 2, -image.height / 2);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  };
 
   const addImage = (id, image) => {
     if (!map.hasImage(id)) {
@@ -478,7 +495,10 @@ const addPlaneIcons = (mapWrapper) => {
       return Promise.all(
         CATEGORY_SLUGS.map((slug) =>
           loadImage(`/icons/plane-${slug}.png`)
-            .then((img) => addImage(`plane-icon-${slug}`, img))
+            .then((img) => {
+              const finalImg = NORTH_FACING_SLUGS.has(slug) ? rotateImage90CW(img) : img;
+              addImage(`plane-icon-${slug}`, finalImg);
+            })
             .catch(() => { /* missing icon falls back to plane-icon via coalesce */ })
         )
       );
