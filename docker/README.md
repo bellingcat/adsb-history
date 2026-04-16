@@ -9,7 +9,7 @@ Run the full stack with **all data under the repo `data/` folder**. Restarts use
 ## Prerequisites
 
 - Docker (Compose v2)
-- **jq** (for the download script)
+- **curl** and **jq** (for the download script)
 - From repo root: `cp docker/.env.example docker/.env`
 
 ---
@@ -23,7 +23,16 @@ mkdir -p data
 ./scripts/download-globe-history.sh data
 ```
 
-The script prints the release dir (e.g. `v2026.03.10-planes-readsb-staging-0`). Use it as **RELEASE_DIR** below.
+From an **interactive terminal**, the script fetches the [globe_history](https://github.com/adsblol/globe_history/releases) release list (paginated; needs **curl** and **jq**), shows **prod-only** builds (tag contains `-planes-readsb-prod-`), and prompts for what to download:
+
+- **Indices** (newest = 1): `3`, `1,4,6`, or range `5-10`
+- **One day:** `2026.04.15`
+- **Date range:** `2026.04.10..2026.04.15` or `2026.04.10-2026.04.15`
+- **Empty** at the prompt → latest prod only
+
+You can combine comma-separated tokens. Each chosen release is extracted under `data/<RELEASE_DIR>/` (directory name matches the GitHub tag stem, e.g. `v2026.04.15-planes-readsb-prod-0`). Use that path as **RELEASE_DIR** for the loader below (repeat `data-loading` per release if you downloaded several).
+
+**Non-interactive** (piped stdin or no TTY): downloads the **latest prod** release only—useful for scripts/CI.
 
 ### 2. Choose database: local or external
 
@@ -32,11 +41,11 @@ The script prints the release dir (e.g. `v2026.03.10-planes-readsb-staging-0`). 
 | **Local Postgres** (default) | `docker compose -f docker/docker-compose.yml up -d` | `docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap` |
 | **External DB** (`DATABASE_URL` in `docker/.env`) | See [External database](#external-database) | Same `run --rm data-loading /data/RELEASE_DIR/heatmap` with external compose (see below) |
 
-**Example** (local Postgres, release dir `v2026.03.10-planes-readsb-staging-0`):
+**Example** (local Postgres, release dir `v2026.04.15-planes-readsb-prod-0`):
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
-docker compose -f docker/docker-compose.yml run --rm data-loading /data/v2026.03.10-planes-readsb-staging-0/heatmap
+docker compose -f docker/docker-compose.yml run --rm data-loading /data/v2026.04.15-planes-readsb-prod-0/heatmap
 ```
 
 Paths for the loader are **inside the container**: host `data/` is mounted at `/data`, so use `/data/RELEASE_DIR/heatmap`, not `data/RELEASE_DIR/heatmap`.
