@@ -16,6 +16,7 @@ This project consists of three main components:
 2. **Backend API** - Flask-based REST API with Firebase authentication
 3. **Frontend** - Vue.js web application with interactive maps and query builder
 
+For docker version (local run) : [Check here](docker#readme)
 ## Architecture
 
 ### Database Schema
