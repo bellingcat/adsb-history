@@ -45,13 +45,13 @@ The `modes` table provides additional aircraft metadata based on ICAO hex codes.
 ### Backend API
 - Python 3.x
 - PostgreSQL database (configured)
-- Firebase project with authentication enabled
+- Firebase project with authentication enabled (optional: set `DISABLE_AUTH=1` to run without auth, e.g. local/Docker)
 - Required Python packages (see `backend-api/requirements.txt`)
 
 ### Frontend
 - Node.js (v16+)
 - npm or yarn
-- Firebase project (matching backend)
+- Firebase project (matching backend), or set `VITE_DISABLE_AUTH=1` to run without login (query history disabled)
 
 ## Installation
 
@@ -191,9 +191,9 @@ python process_adsb_data.py /path/to/data/directory
 # --verbose: Enable verbose logging
 ```
 
-Data can be downloaded from [adsb.lol's data releases](https://github.com/adsblol/globe_history/releases).
+Data can be downloaded from [adsb.lol globe_history](https://github.com/adsblol/globe_history/releases). Releases are split tar archives (`.tar.aa`, `.tar.ab`, …). For the recommended download script and full Docker workflow (local or external DB), see **[docker/README.md](docker/README.md)**.
 
-For example, data for October 28th, 2025, once downloaded from Github and extracted, can be imported into the database as follows:
+Example after extracting a release (e.g. into `v2025.10.28-planes-readsb-prod-0/`):
 
 ```bash
 python process_adsb_data.py v2025.10.28-planes-readsb-prod-0/heatmap
@@ -223,6 +223,8 @@ npm run build
 ```
 
 Built files will be in `frontend/dist/`.
+
+For **Docker**, see **[docker/README.md](docker/README.md)** — run the full stack with all data under the `data/` folder so restarts load from there automatically.
 
 ## API Endpoints
 

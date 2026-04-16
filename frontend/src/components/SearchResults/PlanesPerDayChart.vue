@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useQueryStore } from '../../stores/query';
 import { useUiStore } from '../../stores/ui';
 import { storeToRefs } from 'pinia';
@@ -13,6 +13,7 @@ import {
   Tooltip, 
   Legend 
 } from 'chart.js';
+import { getConsistentColor } from '../../utils/colors';
 
 // Register Chart.js components
 ChartJS.register(
@@ -201,10 +202,7 @@ const toggleTypecodeSelection = (typecode) => {
 
 // Compute the data for the chart
 const chartData = computed(() => {
-  console.log('Computing chart data, filteredSearchResults:', filteredSearchResults.value, 'stacked mode:', stackedMode.value);
-  
   if (!filteredSearchResults.value || !filteredSearchResults.value.results || filteredSearchResults.value.results.length === 0) {
-    console.log('No search results available');
     return {
       labels: [],
       datasets: [{
@@ -274,11 +272,6 @@ const chartData = computed(() => {
         end.setDate(end.getDate() + 6);
         return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
       }
-    });
-
-    console.log(`Processed ${isMonthlyMode.value ? 'monthly' : 'weekly'} chart data:`, { 
-      periods: formattedLabels, 
-      totals: periodTotals 
     });
 
     return {
@@ -362,12 +355,6 @@ const chartData = computed(() => {
       borderWidth: 1
     }));
 
-    console.log(`Processed stacked ${isMonthlyMode.value ? 'monthly' : 'weekly'} chart data:`, {
-      periods: formattedLabels,
-      aircraft: aircraftList.length,
-      datasets: datasets.length
-    });
-
     return {
       labels: formattedLabels,
       datasets: datasets
@@ -447,40 +434,6 @@ const chartData = computed(() => {
   }
 });
 
-// Helper function to get consistent color for aircraft hex code
-//   attempts to ensure that the colors are relatively distinct
-function getConsistentColor(hex) {
-  // Shuffled saturated color palette for better distribution
-  const baseColors = [
-    '#26DE81', '#B33771', '#FF4757', '#0652DD', '#F39C12',
-    '#70A1FF', '#E84393', '#00D8D6', '#C0392B', '#A742FA',
-    '#FD7E14', '#1ABC9C', '#6C5CE7', '#FF9F43', '#009432',
-    '#74B9FF', '#D63384', '#EE5A24', '#3498DB', '#A55EEA',
-    '#CD6133', '#2980B9', '#FF6B35', '#20C997', '#6F42C1',
-    '#FFDA79', '#833471', '#0D6EFD', '#E67E22', '#1DD1A1',
-    '#FC427B', '#40407A', '#F1C40F', '#00A8CC', '#DC3545',
-    '#A5B1C2', '#3742FA', '#218C74', '#FFA502', '#8E44AD',
-    '#FF5E5B', '#006BA6', '#2ED573', '#10AC84', '#6610F2',
-    '#FDCB6E', '#7158E2', '#0ABDE3', '#C44569', '#27AE60',
-    '#FF3838', '#5758BB', '#16A085', '#FEA47F', '#9B59B6',
-    '#F8B500', '#00CEC9', '#D35400', '#1289A7', '#FFDD59',
-    '#006266', '#4834D4', '#00D2D3', '#E74C3C', '#198754',
-    '#FD79A8', '#00B894', '#FF6348'
-  ];
-  
-  // Create a deterministic hash from the hex string using djb2 algorithm
-  let hash = 5381; // djb2 initial value
-  for (let i = hex.length - 1; i >= 0; i--) {
-    const char = hex.charCodeAt(i);
-    hash = ((hash << 5) + hash) + char; // hash * 33 + char
-  }
-
-  hash = Math.abs(hash);
-  
-  // Use hash to select from predefined colors for better visual separation
-  return baseColors[hash % baseColors.length];
-}
-
 // Handle bar click to filter by date range
 const handleBarClick = (event, elements) => {
   if (elements.length === 0) return;
@@ -551,7 +504,6 @@ const handleBarClick = (event, elements) => {
   // Trigger new search
   queryStore.search();
   
-  console.log(`Clicked bar ${clickedIndex}: ${formattedStartDate} to ${formattedEndDate}`);
 };
 
 watch(isStackedModeDisabled, (disabled) => {
@@ -560,10 +512,6 @@ watch(isStackedModeDisabled, (disabled) => {
   }
 });
 
-// Debug on mount
-onMounted(() => {
-  console.log('Component mounted, chartData:', chartData.value);
-});
 </script>
 
 <template>
@@ -613,8 +561,6 @@ onMounted(() => {
           :key="`${stackedMode}-${isMonthlyMode ? 'monthly' : 'weekly'}-${selectedAircraft.size}`"
           :data="chartData" 
           :options="chartOptions" 
-          @chart:render="() => console.log('Chart rendered')"
-          @chart:error="(error) => console.error('Chart error:', error)"
         />
       </div>
       <div v-else>

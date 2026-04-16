@@ -1,0 +1,16 @@
+# Backend API
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend-api/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend-api/ .
+
+EXPOSE 5000
+CMD ["python", "flask-adsb-api.py"]

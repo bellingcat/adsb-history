@@ -1,6 +1,6 @@
 # adsb-history-frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Vite frontend for [Turnstone ADS-B History](../README.md). For setup and running the full stack, see the repo root and [docker/README.md](../docker/README.md).
 
 ## Recommended IDE Setup
 

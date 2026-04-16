@@ -232,7 +232,6 @@ const triggerSelectionSave = () => {
 
 // Function to handle current items update
 const handleCurrentItemsUpdate = (items) => {
-  console.log('items', items);
   currentItems.value = items;
 };
 

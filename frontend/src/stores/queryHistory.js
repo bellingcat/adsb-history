@@ -38,8 +38,8 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       try {
         const timestamp = new Date().toISOString();
         const resultCount = searchResults?.count || 0;
-        
-        // Transform rois to be Firestore-compatible by flattening the structure
+
+        // Transform rois to be storage-compatible (flattened)
         const transformedParams = {
           ...queryParams,
           rois: queryParams.rois.map(roi => ({
@@ -50,9 +50,8 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
             }))
           }))
         };
-        
-        // Convert selectedAircraft Set to Array for storage (or use all hex codes if not provided)
-        const selectedAircraftArray = selectedAircraft 
+
+        const selectedAircraftArray = selectedAircraft
           ? Array.from(selectedAircraft)
           : [...new Set(searchResults?.results?.map(r => r.hex) || [])];
 
@@ -67,24 +66,30 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
           selectedAircraft: selectedAircraftArray,
         };
 
-        console.log('metadataEntry', metadataEntry);
-
-        const metadataRef = await addDoc(collection(db, 'queryMetadata'), metadataEntry);
-        
-        // Store results based on size
-        if (resultCount > 1000) {
-          await indexedDBStore.storeLargeResults(metadataRef.id, searchResults);
+        if (db) {
+          // Firebase path
+          const metadataRef = await addDoc(collection(db, 'queryMetadata'), metadataEntry);
+          if (resultCount > 1000) {
+            await indexedDBStore.storeLargeResults(metadataRef.id, searchResults);
+          } else {
+            await addDoc(collection(db, 'queryResults'), {
+              queryId: metadataRef.id,
+              userId: authStore.user.uid,
+              userEmail: authStore.user.email,
+              results: searchResults,
+            });
+          }
+          this.metadata.unshift({ id: metadataRef.id, ...metadataEntry });
+          this.currentQueryId = metadataRef.id;
         } else {
-          await addDoc(collection(db, 'queryResults'), {
-            queryId: metadataRef.id,
-            userId: authStore.user.uid,
-            userEmail: authStore.user.email,
-            results: searchResults,
-          });
+          // Local IndexedDB path (no Firebase)
+          const id = crypto.randomUUID();
+          const entry = { id, ...metadataEntry };
+          await indexedDBStore.putMetadata(entry);
+          await indexedDBStore.storeLargeResults(id, searchResults);
+          this.metadata.unshift(entry);
+          this.currentQueryId = id;
         }
-        
-        this.metadata.unshift({ id: metadataRef.id, ...metadataEntry });
-        this.currentQueryId = metadataRef.id;
       } catch (error) {
         console.error('Error adding query to history:', error);
         this.error = error.message;
@@ -102,19 +107,24 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       this.missingDataError = null;
 
       try {
-        // Query Firestore for user's metadata
-        const q = query(
-          collection(db, 'queryMetadata'),
-          where('userId', '==', authStore.user.uid),
-          orderBy('timestamp', 'desc'),
-          limit(50),
-        );
-
-        const querySnapshot = await getDocs(q);
-        this.metadata = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        if (db) {
+          const q = query(
+            collection(db, 'queryMetadata'),
+            where('userId', '==', authStore.user.uid),
+            orderBy('timestamp', 'desc'),
+            limit(50),
+          );
+          const querySnapshot = await getDocs(q);
+          this.metadata = querySnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+        } else {
+          const all = await useIndexedDBStore().getAllMetadata();
+          this.metadata = all
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 50);
+        }
       } catch (error) {
         console.error('Error loading query history:', error);
         this.error = error.message;
@@ -129,29 +139,37 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       this.missingDataError = null;
 
       try {
-        const metadataRef = doc(db, 'queryMetadata', queryId);
-        const metadataSnap = await getDoc(metadataRef);
-        
-        if (!metadataSnap.exists()) return null;
-
-        const metadata = metadataSnap.data();
+        let metadata;
         let results = null;
 
-        if (metadata.isLargeResult) {
+        if (db) {
+          const metadataRef = doc(db, 'queryMetadata', queryId);
+          const metadataSnap = await getDoc(metadataRef);
+          if (!metadataSnap.exists()) return null;
+          metadata = metadataSnap.data();
+          if (metadata.isLargeResult) {
+            results = await indexedDBStore.getLargeResults(queryId);
+            if (!results) {
+              this.missingDataError = 'The results for this query are no longer available in your browser. This can happen if you cleared your browser data or if the data was deleted.';
+            }
+          } else {
+            const resultsQuery = query(
+              collection(db, 'queryResults'),
+              where('queryId', '==', queryId),
+              where('userId', '==', authStore.user.uid),
+              limit(1)
+            );
+            const resultsSnapshot = await getDocs(resultsQuery);
+            if (!resultsSnapshot.empty) {
+              results = resultsSnapshot.docs[0].data().results;
+            }
+          }
+        } else {
+          metadata = await indexedDBStore.getMetadata(queryId);
+          if (!metadata) return null;
           results = await indexedDBStore.getLargeResults(queryId);
           if (!results) {
             this.missingDataError = 'The results for this query are no longer available in your browser. This can happen if you cleared your browser data or if the data was deleted.';
-          }
-        } else {
-          const resultsQuery = query(
-            collection(db, 'queryResults'),
-            where('queryId', '==', queryId),
-            where('userId', '==', authStore.user.uid),
-            limit(1)
-          );
-          const resultsSnapshot = await getDocs(resultsQuery);
-          if (!resultsSnapshot.empty) {
-            results = resultsSnapshot.docs[0].data().results;
           }
         }
 
@@ -169,19 +187,15 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
           }
         };
 
-        const fullQuery = { id: metadataSnap.id, ...transformedMetadata, results };
-        
-        // Update local state
+        const fullQuery = { id: queryId, ...transformedMetadata, results };
+
         const index = this.metadata.findIndex((q) => q.id === queryId);
         if (index !== -1) {
           this.metadata[index] = fullQuery;
         } else {
           this.metadata.unshift(fullQuery);
         }
-        
-        // Track the current query for selection updates
         this.currentQueryId = queryId;
-        
         return fullQuery;
       } catch (error) {
         console.error('Error loading query:', error);
@@ -195,10 +209,17 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       if (!authStore.user) return;
 
       try {
-        const docRef = doc(db, 'queryMetadata', queryId);
-        await updateDoc(docRef, { name });
-        
-        // Update local state
+        if (db) {
+          const docRef = doc(db, 'queryMetadata', queryId);
+          await updateDoc(docRef, { name });
+        } else {
+          const indexedDBStore = useIndexedDBStore();
+          const entry = await indexedDBStore.getMetadata(queryId);
+          if (entry) {
+            entry.name = name;
+            await indexedDBStore.putMetadata(entry);
+          }
+        }
         const index = this.metadata.findIndex((q) => q.id === queryId);
         if (index !== -1) {
           this.metadata[index].name = name;
@@ -215,17 +236,23 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
 
       try {
         const selectedAircraftArray = Array.from(selectedAircraft);
-        const docRef = doc(db, 'queryMetadata', this.currentQueryId);
-        await updateDoc(docRef, { selectedAircraft: selectedAircraftArray });
-        
-        // Update local state
+        if (db) {
+          const docRef = doc(db, 'queryMetadata', this.currentQueryId);
+          await updateDoc(docRef, { selectedAircraft: selectedAircraftArray });
+        } else {
+          const indexedDBStore = useIndexedDBStore();
+          const entry = await indexedDBStore.getMetadata(this.currentQueryId);
+          if (entry) {
+            entry.selectedAircraft = selectedAircraftArray;
+            await indexedDBStore.putMetadata(entry);
+          }
+        }
         const index = this.metadata.findIndex((q) => q.id === this.currentQueryId);
         if (index !== -1) {
           this.metadata[index].selectedAircraft = selectedAircraftArray;
         }
       } catch (error) {
         console.error('Error updating selected aircraft:', error);
-        // Don't set this.error for selection updates to avoid UI disruption
       }
     },
 
@@ -235,24 +262,26 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       if (!authStore.user) return;
 
       try {
-        const metadataRef = doc(db, 'queryMetadata', queryId);
-        const metadataSnap = await getDoc(metadataRef);
-        const metadata = metadataSnap.data();
-
-        await deleteDoc(metadataRef);
-        
-        if (metadata.isLargeResult) {
-          await indexedDBStore.deleteLargeResults(queryId);
+        if (db) {
+          const metadataRef = doc(db, 'queryMetadata', queryId);
+          const metadataSnap = await getDoc(metadataRef);
+          const metadata = metadataSnap.data();
+          await deleteDoc(metadataRef);
+          if (metadata.isLargeResult) {
+            await indexedDBStore.deleteLargeResults(queryId);
+          } else {
+            const resultsQuery = query(
+              collection(db, 'queryResults'),
+              where('queryId', '==', queryId),
+              where('userId', '==', authStore.user.uid)
+            );
+            const resultsSnapshot = await getDocs(resultsQuery);
+            await Promise.all(resultsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+          }
         } else {
-          const resultsQuery = query(
-            collection(db, 'queryResults'),
-            where('queryId', '==', queryId),
-            where('userId', '==', authStore.user.uid)
-          );
-          const resultsSnapshot = await getDocs(resultsQuery);
-          await Promise.all(resultsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+          await indexedDBStore.deleteLargeResults(queryId);
+          await indexedDBStore.deleteMetadata(queryId);
         }
-        
         this.metadata = this.metadata.filter((q) => q.id !== queryId);
       } catch (error) {
         console.error('Error deleting query:', error);
@@ -266,34 +295,65 @@ export const useQueryHistoryStore = defineStore('queryHistory', {
       if (!authStore.user) return;
 
       try {
-        const metadataQuery = query(
-          collection(db, 'queryMetadata'),
-          where('userId', '==', authStore.user.uid)
-        );
-        const metadataSnapshot = await getDocs(metadataQuery);
-        
-        // Delete all results and metadata
-        await Promise.all(metadataSnapshot.docs.map(async (doc) => {
-          const metadata = doc.data();
-          if (metadata.isLargeResult) {
-            await indexedDBStore.deleteLargeResults(doc.id);
-          } else {
-            const resultsQuery = query(
-              collection(db, 'queryResults'),
-              where('queryId', '==', doc.id),
-              where('userId', '==', authStore.user.uid)
-            );
-            const resultsSnapshot = await getDocs(resultsQuery);
-            await Promise.all(resultsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+        if (db) {
+          const metadataQuery = query(
+            collection(db, 'queryMetadata'),
+            where('userId', '==', authStore.user.uid)
+          );
+          const metadataSnapshot = await getDocs(metadataQuery);
+          for (const docSnap of metadataSnapshot.docs) {
+            const metadata = docSnap.data();
+            if (metadata.isLargeResult) {
+              await indexedDBStore.deleteLargeResults(docSnap.id);
+            } else {
+              const resultsQuery = query(
+                collection(db, 'queryResults'),
+                where('queryId', '==', docSnap.id),
+                where('userId', '==', authStore.user.uid)
+              );
+              const resultsSnapshot = await getDocs(resultsQuery);
+              await Promise.all(resultsSnapshot.docs.map(d => deleteDoc(d.ref)));
+            }
+            await deleteDoc(docSnap.ref);
           }
-          await deleteDoc(doc.ref);
-        }));
-        
+        } else {
+          await indexedDBStore.clearAllMetadata();
+          await indexedDBStore.clearAllLargeResults();
+        }
         this.metadata = [];
       } catch (error) {
         console.error('Error clearing history:', error);
         this.error = error.message;
       }
+    },
+
+    /** Export local history for backup (only when no Firebase). Returns { metadata, resultsByQueryId }. */
+    async exportForBackup() {
+      if (db) return null;
+      const indexedDBStore = useIndexedDBStore();
+      const metadata = await indexedDBStore.getAllMetadata();
+      const resultsByQueryId = {};
+      for (const entry of metadata) {
+        const results = await indexedDBStore.getLargeResults(entry.id);
+        if (results) resultsByQueryId[entry.id] = results;
+      }
+      return { metadata, resultsByQueryId };
+    },
+
+    /** Restore from backup payload into local IndexedDB, then reload history. */
+    async restoreFromBackup(payload) {
+      if (db) return;
+      const { metadata = [], resultsByQueryId = {} } = payload;
+      const indexedDBStore = useIndexedDBStore();
+      await indexedDBStore.clearAllMetadata();
+      await indexedDBStore.clearAllLargeResults();
+      for (const entry of metadata) {
+        await indexedDBStore.putMetadata(entry);
+        if (resultsByQueryId[entry.id]) {
+          await indexedDBStore.storeLargeResults(entry.id, resultsByQueryId[entry.id]);
+        }
+      }
+      await this.loadHistory();
     },
   },
 });

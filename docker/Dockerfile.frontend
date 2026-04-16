@@ -1,0 +1,26 @@
+# Frontend: build then serve with a simple static server
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+
+COPY frontend/ .
+ARG VITE_API_BASE_URL=
+ARG VITE_DISABLE_AUTH=0
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} VITE_DISABLE_AUTH=${VITE_DISABLE_AUTH}
+RUN npm run build
+
+# Serve with nginx; proxy /api to api service so browser uses same origin
+FROM nginx:alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+RUN echo 'server { \
+  root /usr/share/nginx/html; index index.html; \
+  location /api/ { proxy_pass http://api:5000; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; } \
+  location / { try_files $uri $uri/ /index.html; } \
+}' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

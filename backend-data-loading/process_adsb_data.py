@@ -10,9 +10,10 @@ import argparse
 import csv
 import datetime
 import glob
+import gzip
 import os
 import time
-from io import StringIO
+from io import BytesIO, StringIO
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
@@ -27,7 +28,10 @@ def setup_logging(log_file='process_adsb_data.log'):
 def get_database_engine(connection_string=None):
     """Create and return database engine."""
     if connection_string is None:
-        connection_string = 'postgresql://root:postgresql@/adsb?host=/var/run/postgresql'
+        connection_string = os.environ.get(
+            'DATABASE_URL',
+            'postgresql://root:postgresql@/adsb?host=/var/run/postgresql'
+        )
     return create_engine(connection_string)
 
 
@@ -79,8 +83,12 @@ def parse_binary_file(file_path):
         return []
     
     try:
-        # Load binary file into int32 array
-        points = np.fromfile(file_path, dtype=np.int32)
+        with open(file_path, 'rb') as f:
+            raw = f.read()
+        if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+            raw = gzip.decompress(raw)
+        # Load binary into int32 array (from raw bytes)
+        points = np.frombuffer(raw, dtype=np.int32)
         
         if len(points) == 0:
             logger.warning(f"Empty file: {file_path}")
@@ -101,6 +109,16 @@ def parse_binary_file(file_path):
             if points[i] == 243235997:
                 found = 1
                 slices.append(i)
+        
+        if found == 0:
+            # Try big-endian (e.g. some globe_history dumps)
+            points = points.byteswap()
+            pointsU = points.view(np.uint32)
+            pointsU8 = points.view(np.uint8)
+            for i in range(0, len(points), 4):
+                if points[i] == 243235997:
+                    found = 1
+                    slices.append(i)
         
         if found == 0:
             logger.warning(f"No valid data markers found in file: {file_path}")
@@ -226,17 +244,25 @@ def process_directory(directory_path, engine, cleanup_files=False):
     # Find all date directories
     date_dirs = []
     if os.path.isdir(directory_path):
-        # Look for date pattern directories (YYYY-MM-DD)
+        # Look for date pattern directories (YYYY-MM-DD or YYYY.MM.DD)
         for item in os.listdir(directory_path):
             item_path = os.path.join(directory_path, item)
-            if os.path.isdir(item_path) and len(item) == 10 and item.count('-') == 2:
+            if not os.path.isdir(item_path):
+                continue
+            if len(item) == 10 and item.count('-') == 2:
                 try:
                     datetime.datetime.strptime(item, '%Y-%m-%d')
                     date_dirs.append(item_path)
                 except ValueError:
-                    continue
+                    pass
+            elif len(item) == 10 and item.count('.') == 2:
+                try:
+                    datetime.datetime.strptime(item, '%Y.%m.%d')
+                    date_dirs.append(item_path)
+                except ValueError:
+                    pass
         
-        # If no date directories found, assume the directory itself contains files
+        # If no date directories found, assume the directory itself contains files/dirs 0-47
         if not date_dirs:
             date_dirs = [directory_path]
     else:
@@ -249,23 +275,42 @@ def process_directory(directory_path, engine, cleanup_files=False):
     for date_dir in sorted(date_dirs):
         logger.info(f"Processing directory: {date_dir}")
         
-        # Find all numeric files (0-47 for half-hour intervals)
+        # Find all numeric entries (0-47 for half-hour intervals)
+        # Accepted: bare "0".."47", or "N.bin.ttf" / "NN.bin.ttf" (globe_history release format)
         files_pattern = os.path.join(date_dir, "*")
-        files = glob.glob(files_pattern)
+        entries = glob.glob(files_pattern)
         
-        # Filter to numeric files only
+        def slot_from_path(path):
+            name = os.path.basename(path)
+            if name.isdigit():
+                return int(name)
+            if name.endswith('.bin.ttf') and name[:-8].isdigit():  # "04.bin.ttf" -> 4
+                return int(name[:-8])
+            return -1
+        
         numeric_files = []
-        for file_path in files:
-            filename = os.path.basename(file_path)
-            if filename.isdigit() and 0 <= int(filename) <= 47:
-                numeric_files.append(file_path)
+        for path in entries:
+            slot = slot_from_path(path)
+            if slot < 0 or slot > 47:
+                continue
+            if os.path.isfile(path):
+                numeric_files.append(path)
+            elif os.path.isdir(path):
+                inner = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+                if inner:
+                    inner.sort()
+                    numeric_files.append(inner[0])
         
         if not numeric_files:
-            logger.warning(f"No valid data files found in {date_dir}")
+            try:
+                contents = os.listdir(date_dir)
+                logger.warning(f"No valid data files (0-47) found in {date_dir}. Contents ({len(contents)} items): {contents[:30]}{'...' if len(contents) > 30 else ''}")
+            except OSError:
+                logger.warning(f"No valid data files found in {date_dir}")
             continue
         
-        # Sort files by numeric value
-        numeric_files.sort(key=lambda x: int(os.path.basename(x)))
+        # Sort by slot index (0-47)
+        numeric_files.sort(key=slot_from_path)
         
         for file_path in numeric_files:
             data = parse_binary_file(file_path)

@@ -1,0 +1,20 @@
+# Use this file when you provide your own Postgres (DATABASE_URL in .env).
+# Run: docker compose -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml up -d
+# Local Postgres is replaced by a no-op stub so api/data-loading's depends_on stay defined.
+# API and data-loading use DATABASE_URL from .env, not this container.
+
+services:
+  postgres:
+    image: busybox
+    command: ["sleep", "infinity"]
+    ports: []
+    volumes: []
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 1s
+      timeout: 1s
+      retries: 1
+  api:
+    depends_on: []
+  data-loading:
+    depends_on: []

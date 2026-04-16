@@ -235,7 +235,7 @@ export const useQueryStore = defineStore('query', {
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        this.error = error.message;
+        this.error = error.response?.data?.message || error.response?.data?.error || error.message;
       } finally {
         this.isLoading = false;
       }

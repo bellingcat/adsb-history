@@ -13,6 +13,7 @@ import {
   MglCircleLayer,
   MglFillLayer,
 } from 'vue-maplibre-gl';
+import { getConsistentColor } from '../../utils/colors';
 
 const queryStore = useQueryStore();
 const uiStore = useUiStore();
@@ -30,6 +31,18 @@ const PERFORMANCE_MODE_THRESHOLD = 50000;
 
 // Threshold for disabling hover effects (too many points to track)
 const HOVER_DISABLED_THRESHOLD = 10000;
+
+// Category to icon id (slug). Must match icon filenames in /icons/plane-{slug}.png
+const CATEGORY_SLUGS = [
+  'airliner', 'business-jet', 'helicopter', 'general-aviation', 'uav', 'transport',
+  'fighter', 'bomber', 'trainer', 'tanker', 'reconnaissance', 'liaison', 'maritime-patrol',
+  'electronic-warfare', 'glider', 'balloon', 'amphibian', 'torpedo-bomber', 'gyrocopter', 'airship'
+];
+const categoryToIconId = (category) => {
+  if (!category || typeof category !== 'string') return 'plane-icon';
+  const slug = category.toLowerCase().trim().replace(/\s+/g, '-');
+  return CATEGORY_SLUGS.includes(slug) ? `plane-icon-${slug}` : 'plane-icon';
+};
 
 // Computed to determine if we should use performance mode
 const usePerformanceMode = computed(() => {
@@ -279,38 +292,6 @@ const getDayColor = (day) => {
   return dayColorMap.value.get(day) || '#000000';
 };
 
-// Helper function to get consistent color for aircraft hex code using hash
-function getConsistentColor(hex) {
-  if (!hex) return '#000000';
-
-  const baseColors = [
-    '#26DE81', '#B33771', '#FF4757', '#0652DD', '#F39C12',
-    '#70A1FF', '#E84393', '#00D8D6', '#C0392B', '#A742FA',
-    '#FD7E14', '#1ABC9C', '#6C5CE7', '#FF9F43', '#009432',
-    '#74B9FF', '#D63384', '#EE5A24', '#3498DB', '#A55EEA',
-    '#CD6133', '#2980B9', '#FF6B35', '#20C997', '#6F42C1',
-    '#FFDA79', '#833471', '#0D6EFD', '#E67E22', '#1DD1A1',
-    '#FC427B', '#40407A', '#F1C40F', '#00A8CC', '#DC3545',
-    '#A5B1C2', '#3742FA', '#218C74', '#FFA502', '#8E44AD',
-    '#FF5E5B', '#006BA6', '#2ED573', '#10AC84', '#6610F2',
-    '#FDCB6E', '#7158E2', '#0ABDE3', '#C44569', '#27AE60',
-    '#FF3838', '#5758BB', '#16A085', '#FEA47F', '#9B59B6',
-    '#F8B500', '#00CEC9', '#D35400', '#1289A7', '#FFDD59',
-    '#006266', '#4834D4', '#00D2D3', '#E74C3C', '#198754',
-    '#FD79A8', '#00B894', '#FF6348'
-  ];
-
-  let hash = 5381;
-  for (let i = hex.length - 1; i >= 0; i--) {
-    const char = hex.charCodeAt(i);
-    hash = ((hash << 5) + hash) + char;
-  }
-
-  hash = Math.abs(hash);
-
-  return baseColors[hash % baseColors.length];
-}
-
 // Get unique aircraft with their info for legend
 const uniqueAircraft = computed(() => {
   if (
@@ -410,30 +391,33 @@ const mapFeatures = computed(() => {
   const hoverEnabled = resultsCount <= HOVER_DISABLED_THRESHOLD;
   const currentHoveredHex = hoverEnabled ? hoveredAircraft.value : null;
 
-  const features = resultsToRender.map((result) => ({
-    type: 'Feature',
-    geometry: {
-      type: 'Point',
-      coordinates: [result.lon, result.lat],
-    },
-    properties: {
-      hex: result.hex,
-      flight: result.flight,
-      alt: result.alt,
-      gs: result.gs,
-      bearing: (result.bearing * 360) / (Math.PI * 2) - 90,
-      t: result.t.replace('T', '\n').slice(0, 16),
-      typecode: result.typecode || '-',
-      color: colorMode.value === 'day'
-        ? getColorByDay(result.t)
-        : colorMode.value === 'aircraft'
-        ? getColorByAircraft(result.hex)
-        : colorMode.value === 'aircraftType'
-        ? getColorByAircraftType(result.typecode)
-        : getColorByAltitude(result.alt),
-      isHovered: currentHoveredHex === result.hex,
-    },
-  }));
+  const features = resultsToRender
+    .filter((result) => result.lat != null && result.lon != null)
+    .map((result) => ({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [result.lon, result.lat],
+      },
+      properties: {
+        hex: result.hex,
+        flight: result.flight,
+        alt: result.alt,
+        gs: result.gs,
+        bearing: (result.bearing * 360) / (Math.PI * 2) - 90,
+        t: result.t ? result.t.replace('T', '\n').slice(0, 16) : '',
+        typecode: result.typecode || '-',
+        iconImage: categoryToIconId(result.category),
+        color: colorMode.value === 'day'
+          ? getColorByDay(result.t)
+          : colorMode.value === 'aircraft'
+          ? getColorByAircraft(result.hex)
+          : colorMode.value === 'aircraftType'
+          ? getColorByAircraftType(result.typecode)
+          : getColorByAltitude(result.alt),
+        isHovered: currentHoveredHex === result.hex,
+      },
+    }));
 
   return {
     type: 'FeatureCollection',
@@ -473,20 +457,33 @@ const boundingBoxesGeoJSON = computed(() => {
   };
 });
 
-// Add plane icon to the map
-const addPlaneIcon = (mapWrapper) => {
+// Add plane icons (default + per-category) to the map
+const addPlaneIcons = (mapWrapper) => {
   const map = mapWrapper.map;
 
-  map.loadImage('/plane.png', (error, image) => {
-    if (error) {
-      console.error('Error loading plane icon:', error);
-      return;
-    }
+  const loadImage = (url) =>
+    new Promise((resolve, reject) => {
+      map.loadImage(url, (err, image) => (err ? reject(err) : resolve(image)));
+    });
 
-    if (!map.hasImage('plane-icon')) {
-      map.addImage('plane-icon', image, { sdf: true });
+  const addImage = (id, image) => {
+    if (!map.hasImage(id)) {
+      map.addImage(id, image, { sdf: true });
     }
-  });
+  };
+
+  loadImage('/plane.png')
+    .then((image) => {
+      addImage('plane-icon', image);
+      return Promise.all(
+        CATEGORY_SLUGS.map((slug) =>
+          loadImage(`/icons/plane-${slug}.png`)
+            .then((img) => addImage(`plane-icon-${slug}`, img))
+            .catch(() => { /* missing icon falls back to plane-icon via coalesce */ })
+        )
+      );
+    })
+    .catch((err) => console.error('Error loading plane icon:', err));
 };
 
 // Fit map to bounds when results change
@@ -504,7 +501,7 @@ const fitMapToBounds = (mapWrapper) => {
 
 // Handle map load event
 const onMapLoad = (mapWrapper) => {
-  addPlaneIcon(mapWrapper);
+  addPlaneIcons(mapWrapper);
   fitMapToBounds(mapWrapper);
 
   mapRef.value = mapWrapper.map;
@@ -558,7 +555,7 @@ const planePaint = {
 };
 
 const planeLayout = {
-  'icon-image': 'plane-icon',
+  'icon-image': ['coalesce', ['image', ['get', 'iconImage']], 'plane-icon'],
   'icon-size': ['case', ['get', 'isHovered'], 1.0, 0.6],
   'icon-allow-overlap': true,
   'icon-ignore-placement': true,

@@ -4,6 +4,8 @@ import { useQueryHistoryStore } from '@/stores/queryHistory';
 import { useUiStore } from '@/stores/ui';
 import { storeToRefs } from 'pinia';
 import { ref, nextTick, onMounted } from 'vue';
+import { isAuthDisabled } from '@/firebase';
+import { getQueryHistoryBackup, saveQueryHistoryBackup } from '@/services/api';
 
 const queryStore = useQueryStore();
 const queryHistoryStore = useQueryHistoryStore();
@@ -13,6 +15,40 @@ const { metadata, isLoading, error } = storeToRefs(queryHistoryStore);
 const editingQueryId = ref(null);
 const editName = ref('');
 const nameInputRef = ref(null);
+const backupRestoreMessage = ref('');
+const backupRestoreLoading = ref(false);
+
+const saveToDataFolder = async () => {
+  backupRestoreLoading.value = true;
+  backupRestoreMessage.value = '';
+  try {
+    const data = await queryHistoryStore.exportForBackup();
+    if (!data) {
+      backupRestoreMessage.value = 'Only available when using local history (no Firebase).';
+      return;
+    }
+    await saveQueryHistoryBackup(data);
+    backupRestoreMessage.value = 'Saved to data/query-history-backup.json';
+  } catch (e) {
+    backupRestoreMessage.value = e.response?.data?.error || e.message || 'Save failed';
+  } finally {
+    backupRestoreLoading.value = false;
+  }
+};
+
+const restoreFromDataFolder = async () => {
+  backupRestoreLoading.value = true;
+  backupRestoreMessage.value = '';
+  try {
+    const data = await getQueryHistoryBackup();
+    await queryHistoryStore.restoreFromBackup(data);
+    backupRestoreMessage.value = 'Restored from data folder.';
+  } catch (e) {
+    backupRestoreMessage.value = e.response?.status === 404 ? 'No backup file found.' : (e.response?.data?.error || e.message || 'Restore failed');
+  } finally {
+    backupRestoreLoading.value = false;
+  }
+};
 
 // Load history when component is mounted
 onMounted(async () => {
@@ -20,7 +56,6 @@ onMounted(async () => {
 });
 
 const loadHistoricalQuery = async (queryId) => {
-  console.log('loadHistoricalQuery', queryId);
   const query = await queryHistoryStore.loadQuery(queryId);
   if (query) {
     queryStore.updateQueryParams(query.params);
@@ -176,6 +211,31 @@ const getQueryTitle = (query) => {
         <v-icon>mdi-delete</v-icon>
       </template>
     </v-list-item>
+    <template v-if="isAuthDisabled">
+      <v-divider class="my-2"></v-divider>
+      <v-list-item
+        title="Save to data folder"
+        :disabled="backupRestoreLoading"
+        @click="saveToDataFolder"
+      >
+        <template v-slot:prepend>
+          <v-progress-circular v-if="backupRestoreLoading" indeterminate size="20"></v-progress-circular>
+          <v-icon v-else>mdi-content-save</v-icon>
+        </template>
+      </v-list-item>
+      <v-list-item
+        title="Restore from data folder"
+        :disabled="backupRestoreLoading"
+        @click="restoreFromDataFolder"
+      >
+        <template v-slot:prepend>
+          <v-icon>mdi-folder-download</v-icon>
+        </template>
+      </v-list-item>
+      <v-alert v-if="backupRestoreMessage" type="info" density="compact" class="ma-2" closable>
+        {{ backupRestoreMessage }}
+      </v-alert>
+    </template>
   </v-list>
 </template>
 

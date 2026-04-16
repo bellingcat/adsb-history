@@ -36,6 +36,7 @@ coverage
 # Environment variables
 .env
 .env.local
+docker/.env
 .env.development.local
 .env.test.local
 .env.production.local
@@ -43,5 +44,14 @@ coverage
 .firebase
 .firebaserc
 
+# Docker persistent data (keep data/README.txt)
+/data/heatmap/
+/data/pgdata/
+/data/*.json
+/data/modes.csv
+/data/query-history-backup.json
+
 *.pyc
 __pycache__/
+
+data/v2026*
