@@ -199,16 +199,17 @@ export const useQueryStore = defineStore('query', {
           // Use the API service to make the request
           response = await api.get(`${endpoint}?${params.toString()}`);
         }
-        this.searchResults = response.data;
-        this.isLargeResult = this.searchResults?.count > 1000;
+        const data = response.data;
+        this.isLargeResult = data?.count > 1000;
 
-        // Add to history after successful search
-        if (!this.error && this.searchResults) {
-          // Get selected aircraft from UI store - initially all hex codes from results
+        // Persist history and set currentQueryId BEFORE exposing results to the UI.
+        // Otherwise watchers (e.g. aircraft selection) run while currentQueryId still
+        // points at the previous query and filter new results to an empty set — map won't mount.
+        if (!this.error && data) {
           const uiStore = useUiStore();
-          const allHexCodes = new Set(this.searchResults.results?.map(r => r.hex) || []);
-          
-          queryHistoryStore.addQuery(
+          const allHexCodes = new Set(data.results?.map(r => r.hex) || []);
+
+          await queryHistoryStore.addQuery(
             {
               startDate: this.startDate,
               endDate: this.endDate,
@@ -229,10 +230,12 @@ export const useQueryStore = defineStore('query', {
               minTimeDiff: this.minTimeDiff,
               maxTimeDiff: this.maxTimeDiff
             },
-            this.searchResults,
-            allHexCodes // Save all aircraft as selected initially
+            data,
+            allHexCodes
           );
         }
+
+        this.searchResults = data;
       } catch (error) {
         console.error('Error fetching data:', error);
         this.error = error.response?.data?.message || error.response?.data?.error || error.message;
