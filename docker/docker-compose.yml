@@ -28,16 +28,18 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DB_HOST: ${DB_HOST:-postgres}
       DB_NAME: ${DB_NAME:-adsb}
       DB_USER: ${DB_USER:-adsb}
       DB_PASS: ${DB_PASS:-adsb}
       DB_PORT: ${DB_PORT:-5432}
-      # .env often sets DATABASE_URL to host.docker / localhost for host-side tools; inside this
-      # stack that breaks (127.0.0.1 is the container). Use DB_* to reach service "postgres".
-      # Override with docker-compose.external-db.yml when using DATABASE_URL for a remote DB.
-      DATABASE_URL: ""
+      # Optional: Postgres on the host or outside the compose network. Must use host.docker.internal
+      # (or a real IP), never localhost — inside a container localhost is the container itself.
+      # Leave unset to use DB_* against service "postgres".
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-}
       DISABLE_AUTH: ${DISABLE_AUTH:-1}
       QUERY_HISTORY_BACKUP_PATH: ${QUERY_HISTORY_BACKUP_PATH:-/data/query-history-backup.json}
       FIREBASE_SERVICE_ACCOUNT_KEY: ${FIREBASE_SERVICE_ACCOUNT_KEY:-/app/firebase-key.json}
@@ -67,8 +69,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.data-loading
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-adsb}:${POSTGRES_PASSWORD:-adsb}@postgres:5432/${POSTGRES_DB:-adsb}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-adsb}:${POSTGRES_PASSWORD:-adsb}@postgres:5432/${POSTGRES_DB:-adsb}}
     volumes:
       - ../data:/data:ro
     depends_on:
