@@ -82,7 +82,7 @@ Source: [adsblol/globe_history releases](https://github.com/adsblol/globe_histor
 | Inclusive range | `2026.04.10..2026.04.15` or `2026.04.10-2026.04.15` |
 | Empty line | Latest prod only |
 
-Comma-separated tokens can be mixed (e.g. `1,2026.04.14,5-7`). Each chosen release is extracted to `data/<RELEASE_DIR>/`. Run `data-loading` once per release if you downloaded several.
+Comma-separated tokens can be mixed (e.g. `1,2026.04.14,5-7`). Each chosen release is extracted to `data/<RELEASE_DIR>/`. Load all of them with one bulk `data-loading` run (default `/data`), or point the loader at a single `/data/<RELEASE_DIR>/heatmap`.
 
 **Non-interactive** (no TTY / piped stdin): downloads the **latest prod** release only (CI-friendly).
 
@@ -113,11 +113,12 @@ docker compose -f docker/docker-compose.yml up -d
 
 **Load heatmap:**
 
-- Entire `data/` tree:  `docker compose -f docker/docker-compose.yml run --rm data-loading`
-- One release only:  
+- **All releases under `data/`** (every `data/*/heatmap` that contains data; `data/pgdata` is skipped):  
+  `docker compose -f docker/docker-compose.yml run --rm data-loading`
+- **One release:**  
   `docker compose -f docker/docker-compose.yml run --rm data-loading /data/RELEASE_DIR/heatmap`
 
-The loader expects the **`heatmap`** subdirectory (files `0`–`47` or `00.bin.ttf`–`47.bin.ttf`).
+The loader expects each heatmap tree under **`heatmap/`** (per-day folders or flat files `0`–`47` / `00.bin.ttf`–`47.bin.ttf`).
 
 ---
 
@@ -173,4 +174,4 @@ Adjust the final `docker compose` line if you use the external-DB compose files.
   `docker compose -f docker/docker-compose.yml up -d`
 - **With external DB:** add `-f docker/docker-compose.external-db.yml`.
 - **With Firebase auth:** add `-f docker/docker-compose.firebase.yml` and configure `data/firebase-key.json`.
-- **New heatmap:** extract under `data/`, then `run --rm data-loading /data/<dir>/heatmap`.
+- **New heatmap:** extract under `data/`, then either bulk `run --rm data-loading` or one release: `run --rm data-loading /data/<dir>/heatmap`.

@@ -213,7 +213,9 @@ run_interactive() {
 
   echo ""
   echo "All selected releases processed under $DATA_DIR"
-  echo "Run the loader on each heatmap subfolder, e.g.:"
+  echo "Load heatmaps (bulk: all releases under $DATA_DIR):"
+  echo "  python process_adsb_data.py $DATA_DIR"
+  echo "Or one release:"
   echo "  python process_adsb_data.py $DATA_DIR/<RELEASE_DIR>/heatmap"
 }
 

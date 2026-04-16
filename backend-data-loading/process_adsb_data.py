@@ -225,6 +225,103 @@ def parse_binary_file(file_path):
         return []
 
 
+# Subdirs under a data root that are never scanned for */heatmap (e.g. Postgres files).
+BULK_SCAN_SKIP_DIR_NAMES = frozenset({'pgdata'})
+
+
+def slot_from_path(path):
+    """Half-hour slot index 0..47 from a heatmap path, or -1 if not a slot file/dir."""
+    name = os.path.basename(path)
+    if name.isdigit():
+        return int(name)
+    if name.endswith('.bin.ttf') and name[:-8].isdigit():
+        return int(name[:-8])
+    return -1
+
+
+def find_date_subdirs(directory_path):
+    """Immediate subdirs named YYYY-MM-DD or YYYY.MM.DD; sorted paths."""
+    date_dirs = []
+    for item in os.listdir(directory_path):
+        item_path = os.path.join(directory_path, item)
+        if not os.path.isdir(item_path):
+            continue
+        if len(item) == 10 and item.count('-') == 2:
+            try:
+                datetime.datetime.strptime(item, '%Y-%m-%d')
+                date_dirs.append(item_path)
+            except ValueError:
+                pass
+        elif len(item) == 10 and item.count('.') == 2:
+            try:
+                datetime.datetime.strptime(item, '%Y.%m.%d')
+                date_dirs.append(item_path)
+            except ValueError:
+                pass
+    return sorted(date_dirs)
+
+
+def collect_numeric_files(date_dir):
+    """
+    Paths to heatmap binaries for one day (or flat heatmap): slots 0-47.
+    Accepted: bare "0".."47", or "N.bin.ttf" / "NN.bin.ttf", or first file in slot subdir.
+    """
+    files_pattern = os.path.join(date_dir, "*")
+    entries = glob.glob(files_pattern)
+    numeric_files = []
+    for path in entries:
+        slot = slot_from_path(path)
+        if slot < 0 or slot > 47:
+            continue
+        if os.path.isfile(path):
+            numeric_files.append(path)
+        elif os.path.isdir(path):
+            inner = [
+                os.path.join(path, f)
+                for f in os.listdir(path)
+                if os.path.isfile(os.path.join(path, f))
+            ]
+            if inner:
+                inner.sort()
+                numeric_files.append(inner[0])
+    numeric_files.sort(key=slot_from_path)
+    return numeric_files
+
+
+def heatmap_has_processable_files(directory_path):
+    """True if directory looks like a tar1090 heatmap with at least one slot file."""
+    if not os.path.isdir(directory_path):
+        return False
+    date_dirs = find_date_subdirs(directory_path)
+    to_scan = date_dirs if date_dirs else [directory_path]
+    for d in to_scan:
+        if collect_numeric_files(d):
+            return True
+    return False
+
+
+def discover_heatmap_roots(base_path):
+    """
+    If base_path is itself a heatmap dir (or contains heatmap data directly), return [base_path].
+    Otherwise scan one level of children for <child>/heatmap with data (bulk layout under data/).
+    """
+    if not os.path.isdir(base_path):
+        return []
+    if heatmap_has_processable_files(base_path):
+        return [base_path]
+    roots = []
+    for name in sorted(os.listdir(base_path)):
+        if name.startswith('.') or name in BULK_SCAN_SKIP_DIR_NAMES:
+            continue
+        child = os.path.join(base_path, name)
+        if not os.path.isdir(child):
+            continue
+        hm = os.path.join(child, 'heatmap')
+        if os.path.isdir(hm) and heatmap_has_processable_files(hm):
+            roots.append(hm)
+    return roots
+
+
 def process_directory(directory_path, engine, cleanup_files=False):
     """
     Process all binary files in a directory and insert data into database.
@@ -240,67 +337,23 @@ def process_directory(directory_path, engine, cleanup_files=False):
     if not os.path.exists(directory_path):
         logger.error(f"Directory does not exist: {directory_path}")
         return 0
-    
-    # Find all date directories
-    date_dirs = []
-    if os.path.isdir(directory_path):
-        # Look for date pattern directories (YYYY-MM-DD or YYYY.MM.DD)
-        for item in os.listdir(directory_path):
-            item_path = os.path.join(directory_path, item)
-            if not os.path.isdir(item_path):
-                continue
-            if len(item) == 10 and item.count('-') == 2:
-                try:
-                    datetime.datetime.strptime(item, '%Y-%m-%d')
-                    date_dirs.append(item_path)
-                except ValueError:
-                    pass
-            elif len(item) == 10 and item.count('.') == 2:
-                try:
-                    datetime.datetime.strptime(item, '%Y.%m.%d')
-                    date_dirs.append(item_path)
-                except ValueError:
-                    pass
-        
-        # If no date directories found, assume the directory itself contains files/dirs 0-47
-        if not date_dirs:
-            date_dirs = [directory_path]
-    else:
+
+    if not os.path.isdir(directory_path):
         logger.error(f"Path is not a directory: {directory_path}")
         return 0
-    
+
+    date_dirs = find_date_subdirs(directory_path)
+    if not date_dirs:
+        date_dirs = [directory_path]
+
     total_records = 0
     files_to_cleanup = []
-    
-    for date_dir in sorted(date_dirs):
+
+    for date_dir in date_dirs:
         logger.info(f"Processing directory: {date_dir}")
-        
-        # Find all numeric entries (0-47 for half-hour intervals)
-        # Accepted: bare "0".."47", or "N.bin.ttf" / "NN.bin.ttf" (globe_history release format)
-        files_pattern = os.path.join(date_dir, "*")
-        entries = glob.glob(files_pattern)
-        
-        def slot_from_path(path):
-            name = os.path.basename(path)
-            if name.isdigit():
-                return int(name)
-            if name.endswith('.bin.ttf') and name[:-8].isdigit():  # "04.bin.ttf" -> 4
-                return int(name[:-8])
-            return -1
-        
-        numeric_files = []
-        for path in entries:
-            slot = slot_from_path(path)
-            if slot < 0 or slot > 47:
-                continue
-            if os.path.isfile(path):
-                numeric_files.append(path)
-            elif os.path.isdir(path):
-                inner = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-                if inner:
-                    inner.sort()
-                    numeric_files.append(inner[0])
-        
+
+        numeric_files = collect_numeric_files(date_dir)
+
         if not numeric_files:
             try:
                 contents = os.listdir(date_dir)
@@ -308,9 +361,6 @@ def process_directory(directory_path, engine, cleanup_files=False):
             except OSError:
                 logger.warning(f"No valid data files found in {date_dir}")
             continue
-        
-        # Sort by slot index (0-47)
-        numeric_files.sort(key=slot_from_path)
         
         for file_path in numeric_files:
             data = parse_binary_file(file_path)
@@ -418,8 +468,10 @@ def cleanup_temp_table(engine):
 def main():
     """Main function to run the processing."""
     parser = argparse.ArgumentParser(description='Process ADS-B binary data files')
-    parser.add_argument('directory', 
-                       help='Directory containing ADS-B binary files to process')
+    parser.add_argument(
+        'directory',
+        help='Heatmap directory, parent of heatmap/, or data root (bulk: every */heatmap with data)',
+    )
     parser.add_argument('--connection-string', '-c',
                        help='Database connection string')
     parser.add_argument('--cleanup-files', action='store_true',
@@ -439,14 +491,28 @@ def main():
         logger.add(lambda msg: print(msg, end=''), level='DEBUG')
     
     logger.info("Starting ADS-B data processing")
-    logger.info(f"Processing directory: {args.directory}")
-    
+    base_path = os.path.abspath(args.directory)
+    roots = discover_heatmap_roots(base_path)
+    if not roots:
+        logger.error(f"No heatmap directories with data found under {base_path}")
+        return
+    if len(roots) > 1:
+        logger.info(f"Bulk load: {len(roots)} heatmap roots under {base_path}")
+        for r in roots:
+            logger.info(f"  heatmap root: {r}")
+    else:
+        logger.info(f"Processing heatmap root: {roots[0]}")
+
     try:
         # Create database engine
         engine = get_database_engine(args.connection_string)
-        
-        # Process the directory
-        total_records = process_directory(args.directory, engine, args.cleanup_files)
+
+        if len(roots) > 1:
+            cleanup_temp_table(engine)
+
+        total_records = 0
+        for root in roots:
+            total_records += process_directory(root, engine, args.cleanup_files)
         
         if total_records == 0:
             logger.warning("No records were processed")

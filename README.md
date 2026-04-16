@@ -183,6 +183,7 @@ Process tar1090 binary files and load into the database:
 
 ```bash
 cd backend-data-loading
+# One heatmap tree, or a data root: all */heatmap children with data are loaded in one run
 python process_adsb_data.py /path/to/data/directory
 
 # Options:
@@ -198,6 +199,12 @@ Example after extracting a release (e.g. into `v2025.10.28-planes-readsb-prod-0/
 
 ```bash
 python process_adsb_data.py v2025.10.28-planes-readsb-prod-0/heatmap
+```
+
+Bulk: several releases under one folder (e.g. `data/` with `v*/heatmap/`):
+
+```bash
+python process_adsb_data.py /path/to/data
 ```
 
 ### Running the API
