@@ -16,5 +16,9 @@ services:
       retries: 1
   api:
     depends_on: []
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
   data-loading:
     depends_on: []
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
