@@ -1,3 +1,7 @@
+![ADSB History cover](docs/images/adsb_history_banner.jpg)
+
+--- 
+
 <img src="docs/images/turnstone.png" style="height:188px" alt="Turnstone logo" />
 
 Turnstone is a full-stack application for collecting, storing, and querying historical ADS-B aircraft tracking data. This system enables spatial and temporal queries on aircraft positions, with support for filtering by geographic regions, altitude, speed, bearing, aircraft type and more.
