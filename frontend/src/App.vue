@@ -16,9 +16,11 @@ import InfoBox from './components/QueryBuilder/InfoBox.vue';
 import AuthGuard from './components/AuthGuard.vue';
 import Auth from './components/Auth.vue';
 import { useAuthStore } from './stores/auth';
+import { useUiStore } from './stores/ui';
 import { onMounted } from 'vue';
 
 const authStore = useAuthStore();
+const uiStore = useUiStore();
 
 onMounted(() => {
   authStore.initAuth();
@@ -35,6 +37,11 @@ onMounted(() => {
 
     <AuthGuard>
       <v-navigation-drawer width="300">
+        <div class="pa-3 d-flex align-center gap-2">
+          <img src="/favicon.png" alt="Turnstone" class="flex-shrink-0" width="32" height="32" />
+          <span class="text-subtitle-1 font-weight-medium">Turnstone</span>
+        </div>
+        <v-divider />
         <QueryHistory />
       </v-navigation-drawer>
 
@@ -78,6 +85,14 @@ onMounted(() => {
         </v-container>
       </v-main>
     </AuthGuard>
+
+    <v-snackbar
+      v-model="uiStore.snackbar.show"
+      :color="uiStore.snackbar.color"
+      :timeout="uiStore.snackbar.timeout"
+    >
+      {{ uiStore.snackbar.text }}
+    </v-snackbar>
   </v-layout>
 </template>
 

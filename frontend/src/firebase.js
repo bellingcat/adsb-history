@@ -13,14 +13,25 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app, 'searches');
-const googleProvider = new GoogleAuthProvider();
+const disableAuth = import.meta.env.VITE_DISABLE_AUTH === '1' || import.meta.env.VITE_DISABLE_AUTH === 'true';
+const stubUser = { uid: 'local', email: 'local@dev' };
+
+// Initialize Firebase only when auth is enabled and config present
+let app, auth, db, googleProvider;
+if (!disableAuth && firebaseConfig.apiKey) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app, 'searches');
+  googleProvider = new GoogleAuthProvider();
+} else {
+  auth = null;
+  db = null;
+  googleProvider = null;
+}
 
 // Function to sign in with Google
 export const signInWithGoogle = async () => {
+  if (!auth) return stubUser;
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
@@ -32,6 +43,7 @@ export const signInWithGoogle = async () => {
 
 // Function to sign out
 export const signOut = async () => {
+  if (!auth) return;
   try {
     await auth.signOut();
   } catch (error) {
@@ -42,22 +54,28 @@ export const signOut = async () => {
 
 // Function to get the current user
 export const getCurrentUser = () => {
-  return auth.currentUser;
+  return auth ? auth.currentUser : stubUser;
 };
 
 // Function to get the ID token
 export const getIdToken = async () => {
-  const user = auth.currentUser;
-  if (user) {
-    return await user.getIdToken();
+  if (!auth || !auth.currentUser) return null;
+  try {
+    return await auth.currentUser.getIdToken();
+  } catch (err) {
+    return null;
   }
-  return null;
 };
 
 // Auth state change listener
 export const onAuthStateChanged = (callback) => {
+  if (!auth) {
+    setTimeout(() => callback(stubUser), 0);
+    return () => {};
+  }
   return auth.onAuthStateChanged(callback);
 };
 
 // Export both auth and Firestore instances
-export { auth, db }; 
+export { auth, db };
+export const isAuthDisabled = disableAuth; 

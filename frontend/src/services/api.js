@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/auth';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -48,6 +48,16 @@ export const dispatchQuery = async (queryParams) => {
     console.error('Error dispatching query:', error);
     throw error;
   }
+};
+
+export const getQueryHistoryBackup = async () => {
+  const response = await api.get('/api/query-history/backup');
+  return response.data;
+};
+
+export const saveQueryHistoryBackup = async (data) => {
+  const response = await api.post('/api/query-history/backup', data);
+  return response.data;
 };
 
 // Export the api instance directly

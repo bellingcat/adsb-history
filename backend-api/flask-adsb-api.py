@@ -29,6 +29,13 @@ DB_NAME = os.environ.get('DB_NAME', 'adsb')
 DB_USER = os.environ.get('DB_USER', 'dbuser')
 DB_PASS = os.environ.get('DB_PASS', 'dbpassword')
 DB_PORT = os.environ.get('DB_PORT', '5432')
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip() or None
+
+# When set (e.g. "1" or "true"), API accepts requests without Firebase auth (local/dev only)
+DISABLE_AUTH = os.environ.get('DISABLE_AUTH', '').lower() in ('1', 'true', 'yes')
+
+# Path to save/load query history backup (local mode). When set, GET/POST /api/query-history/backup read/write this file.
+QUERY_HISTORY_BACKUP_PATH = os.environ.get('QUERY_HISTORY_BACKUP_PATH', '').strip() or None
 
 # DB SCHEMA
 '''
@@ -50,6 +57,8 @@ DB_PORT = os.environ.get('DB_PORT', '5432')
 
 def get_db_connection():
     """Create and return a database connection"""
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL)
     return psycopg2.connect(
         host=DB_HOST,
         database=DB_NAME,
@@ -63,6 +72,9 @@ def require_firebase_auth(f):
     """Decorator to require a valid Firebase token for each request"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if DISABLE_AUTH:
+            request.user = {}
+            return f(*args, **kwargs)
         # Get the Authorization header
         auth_header = request.headers.get('Authorization')
         
@@ -964,3 +976,41 @@ def get_intersecting_bboxes():
         # log stack trace using loguru
         logger.error(f"Stack trace: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/query-history/backup', methods=['GET', 'POST'])
+@require_firebase_auth
+def query_history_backup():
+    """Read or write query history backup from/to data folder (when QUERY_HISTORY_BACKUP_PATH is set)."""
+    if not QUERY_HISTORY_BACKUP_PATH:
+        return jsonify({"error": "Query history backup not configured"}), 501
+    if request.method == 'GET':
+        try:
+            if not os.path.isfile(QUERY_HISTORY_BACKUP_PATH):
+                return jsonify({"error": "No backup file found"}), 404
+            with open(QUERY_HISTORY_BACKUP_PATH, 'r', encoding='utf-8') as f:
+                import json
+                data = json.load(f)
+            return jsonify(data)
+        except Exception as e:
+            logger.error(f"Error reading query history backup: {e}", exc_info=True)
+            return jsonify({"error": str(e)}), 500
+    else:
+        try:
+            data = request.get_json(force=True)
+            if not data or not isinstance(data, dict):
+                return jsonify({"error": "Invalid JSON body"}), 400
+            d = os.path.dirname(QUERY_HISTORY_BACKUP_PATH)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(QUERY_HISTORY_BACKUP_PATH, 'w', encoding='utf-8') as f:
+                import json
+                json.dump(data, f, indent=2)
+            return jsonify({"ok": True, "path": QUERY_HISTORY_BACKUP_PATH})
+        except Exception as e:
+            logger.error(f"Error writing query history backup: {e}", exc_info=True)
+            return jsonify({"error": str(e)}), 500
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

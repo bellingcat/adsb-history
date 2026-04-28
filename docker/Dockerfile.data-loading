@@ -1,0 +1,17 @@
+# Backend data loading: process tar1090 heatmap binaries into PostgreSQL
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend-data-loading/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend-data-loading/ .
+
+# Default: run processor on /data (override with command to process a specific path)
+ENTRYPOINT ["python", "process_adsb_data.py"]
+CMD ["/data"]

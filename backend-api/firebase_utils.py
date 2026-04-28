@@ -19,6 +19,11 @@ def initialize_firebase():
         print("Firebase Admin SDK already initialized")
         return
     
+    # Skip when auth is disabled (no Firebase needed)
+    if os.environ.get('DISABLE_AUTH', '').lower() in ('1', 'true', 'yes'):
+        firebase_initialized = False
+        return
+    
     try:
         # Get service account file path from environment variable
         service_account_key = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -37,6 +42,11 @@ def initialize_firebase():
         
         if not os.path.exists(service_account_path):
             print(f"Error: Service account file not found at: {service_account_path}")
+            firebase_initialized = False
+            return
+        
+        if not os.path.isfile(service_account_path):
+            print(f"Error: Service account path is not a file (e.g. missing file, Docker created a directory): {service_account_path}")
             firebase_initialized = False
             return
         

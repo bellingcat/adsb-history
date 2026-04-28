@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useQueryStore } from '@/stores/query';
+import { useUiStore } from '@/stores/ui';
 import { storeToRefs } from 'pinia';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -11,6 +12,7 @@ MapboxDraw.constants.classes.CONTROL_PREFIX = 'maplibregl-ctrl-';
 MapboxDraw.constants.classes.CONTROL_GROUP = 'maplibregl-ctrl-group';
 
 const queryStore = useQueryStore();
+const uiStore = useUiStore();
 const { rois } = storeToRefs(queryStore);
 const mapRef = ref(null);
 const drawRef = ref(null);
@@ -161,7 +163,7 @@ const onMapLoad = (map) => {
       if (features.features.length > 2) {
         // If already have 2 ROIs, prevent drawing more
         drawRef.value.changeMode('simple_select');
-        alert('Maximum of 2 ROIs allowed. Please delete an existing ROI before adding a new one.');
+        uiStore.showSnackbar('Maximum of 2 ROIs allowed. Delete an existing ROI first.', 'warning');
       }
     }
   });

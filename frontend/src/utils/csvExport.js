@@ -9,23 +9,22 @@ export function downloadCSV(data, filename) {
   // Get headers from the first object
   const headers = Object.keys(data[0]);
   
-  // Create CSV content
+  const escapeCsvValue = (value) => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
   const csvContent = [
-    // Headers row
-    headers.join(','),
-    // Data rows
-    ...data.map(row => 
-      headers.map(header => {
-        const value = row[header];
-        // Handle values that might contain commas by wrapping in quotes
-        return typeof value === 'string' && value.includes(',') 
-          ? `"${value}"` 
-          : value;
-      }).join(',')
+    headers.map(escapeCsvValue).join(','),
+    ...data.map(row =>
+      headers.map(header => escapeCsvValue(row[header])).join(',')
     )
   ].join('\n');
 
-  // Create blob and download link
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
@@ -37,4 +36,5 @@ export function downloadCSV(data, filename) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 } 

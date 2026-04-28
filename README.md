@@ -1,3 +1,7 @@
+![ADSB History cover](docs/images/adsb_history_banner.jpg)
+
+--- 
+
 <img src="docs/images/turnstone.png" style="height:188px" alt="Turnstone logo" />
 
 Turnstone is a full-stack application for collecting, storing, and querying historical ADS-B aircraft tracking data. This system enables spatial and temporal queries on aircraft positions, with support for filtering by geographic regions, altitude, speed, bearing, aircraft type and more.
@@ -16,6 +20,7 @@ This project consists of three main components:
 2. **Backend API** - Flask-based REST API with Firebase authentication
 3. **Frontend** - Vue.js web application with interactive maps and query builder
 
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) For docker version (local run) : [Check here](docker#readme)
 ## Architecture
 
 ### Database Schema
@@ -45,13 +50,13 @@ The `modes` table provides additional aircraft metadata based on ICAO hex codes.
 ### Backend API
 - Python 3.x
 - PostgreSQL database (configured)
-- Firebase project with authentication enabled
+- Firebase project with authentication enabled (optional: set `DISABLE_AUTH=1` to run without auth, e.g. local/Docker)
 - Required Python packages (see `backend-api/requirements.txt`)
 
 ### Frontend
 - Node.js (v16+)
 - npm or yarn
-- Firebase project (matching backend)
+- Firebase project (matching backend), or set `VITE_DISABLE_AUTH=1` to run without login (query history disabled)
 
 ## Installation
 
@@ -182,6 +187,7 @@ Process tar1090 binary files and load into the database:
 
 ```bash
 cd backend-data-loading
+# One heatmap tree, or a data root: all */heatmap children with data are loaded in one run
 python process_adsb_data.py /path/to/data/directory
 
 # Options:
@@ -191,12 +197,18 @@ python process_adsb_data.py /path/to/data/directory
 # --verbose: Enable verbose logging
 ```
 
-Data can be downloaded from [adsb.lol's data releases](https://github.com/adsblol/globe_history_2025/releases).
+Data can be downloaded from [adsb.lol globe_history](https://github.com/adsblol/globe_history/releases). Releases are split tar archives (`.tar.aa`, `.tar.ab`, …). For the recommended download script and full Docker workflow (local or external DB), see **[docker/README.md](docker/README.md)**.
 
-For example, data for October 28th, 2025, once downloaded from Github and extracted, can be imported into the database as follows:
+Example after extracting a release (e.g. into `v2025.10.28-planes-readsb-prod-0/`):
 
 ```bash
 python process_adsb_data.py v2025.10.28-planes-readsb-prod-0/heatmap
+```
+
+Bulk: several releases under one folder (e.g. `data/` with `v*/heatmap/`):
+
+```bash
+python process_adsb_data.py /path/to/data
 ```
 
 ### Running the API
@@ -223,6 +235,8 @@ npm run build
 ```
 
 Built files will be in `frontend/dist/`.
+
+For **Docker**, see **[docker/README.md](docker/README.md)** — run the full stack with all data under the `data/` folder so restarts load from there automatically.
 
 ## API Endpoints
 

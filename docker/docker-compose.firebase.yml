@@ -1,0 +1,9 @@
+# Mount Firebase service account key when using Firebase auth.
+# Run with: docker compose -f docker/docker-compose.yml -f docker/docker-compose.firebase.yml up -d
+# Ensure data/firebase-key.json exists (your JSON key file).
+
+services:
+  api:
+    volumes:
+      - ../data:/data
+      - ../data/firebase-key.json:/app/firebase-key.json:ro
