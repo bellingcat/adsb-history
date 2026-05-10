@@ -203,7 +203,7 @@ Process tar1090 binary files and load into the database:
 ```bash
 cd backend-data-loading
 python process_adsb_data.py /path/to/data/directory
-```
+
 # Options:
 # --connection-string: Custom database connection string
 # --cleanup-files: Delete files after successful processing
