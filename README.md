@@ -178,6 +178,26 @@ const firebaseConfig = {
 
 ### Data Loading
 
+You can load data manually using `process_adsb_data.py` or use the automated downloader to fetch and process a range of dates.
+
+#### Automated Downloading
+
+The `download_adsb_data.py` script automatically downloads data from adsb.lol, extracts it, and loads it into your database.
+
+```bash
+cd backend-data-loading
+# Download and process a range of dates
+python download_adsb_data.py --start-date 2025-10-01 --end-date 2025-10-02
+
+# Download and process a single day
+python download_adsb_data.py --start-date 2025-10-01
+
+# Purge the database (clears all data from the adsb table)
+python download_adsb_data.py --purge-db
+```
+
+#### Manual Processing
+
 Process tar1090 binary files and load into the database:
 
 ```bash
