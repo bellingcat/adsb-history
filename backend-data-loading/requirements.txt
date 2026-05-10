@@ -4,3 +4,4 @@ pandas
 numpy
 sqlalchemy
 requests
+tqdm

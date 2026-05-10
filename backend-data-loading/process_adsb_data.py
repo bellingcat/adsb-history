@@ -17,6 +17,7 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 from loguru import logger
+import gzip
 
 
 def setup_logging(log_file='process_adsb_data.log'):
@@ -62,6 +63,24 @@ def psql_insert_copy(table, conn, keys, data_iter):
         cur.copy_expert(sql=sql, file=s_buf)
 
 
+def load_int32_points(file_path):
+    """
+    Load ADS-B heatmap file as int32 values.
+
+    adsb.lol heatmap files may be gzip-compressed even though they end in .bin.ttf.
+    """
+    with open(file_path, "rb") as f:
+        magic = f.read(2)
+
+    if magic == b"\x1f\x8b":
+        logger.debug(f"Decompressing gzip file: {file_path}")
+        with gzip.open(file_path, "rb") as f:
+            data = f.read()
+        return np.frombuffer(data, dtype=np.int32).copy()
+
+    return np.fromfile(file_path, dtype=np.int32)
+
+
 def parse_binary_file(file_path):
     """
     Parse a single ADS-B binary file and return aircraft data.
@@ -80,7 +99,7 @@ def parse_binary_file(file_path):
     
     try:
         # Load binary file into int32 array
-        points = np.fromfile(file_path, dtype=np.int32)
+        points = load_int32_points(file_path)
         
         if len(points) == 0:
             logger.warning(f"Empty file: {file_path}")
@@ -257,7 +276,8 @@ def process_directory(directory_path, engine, cleanup_files=False):
         numeric_files = []
         for file_path in files:
             filename = os.path.basename(file_path)
-            if filename.isdigit() and 0 <= int(filename) <= 47:
+            interval_part = filename.split('.')[0]
+            if interval_part.isdigit() and 0 <= int(interval_part) <= 47:
                 numeric_files.append(file_path)
         
         if not numeric_files:
@@ -265,7 +285,7 @@ def process_directory(directory_path, engine, cleanup_files=False):
             continue
         
         # Sort files by numeric value
-        numeric_files.sort(key=lambda x: int(os.path.basename(x)))
+        numeric_files.sort(key=lambda x: int(os.path.basename(x).split('.')[0]))
         
         for file_path in numeric_files:
             data = parse_binary_file(file_path)
