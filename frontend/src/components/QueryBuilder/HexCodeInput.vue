@@ -10,7 +10,7 @@ const fileInput = ref(null);
 const showListDialog = ref(false);
 
 const handleHexCodeChange = (value) => {
-  queryStore.updateQueryParams({ hexCode: value });
+  queryStore.updateQueryParams({ hexCode: value?.toLowerCase() ?? null });
 };
 
 const triggerFileUpload = () => {
