@@ -27,7 +27,7 @@ The main `adsb` table contains:
 - `alt` - Altitude in feet
 - `gs` - Ground speed in knots
 - `geom` - PostGIS geometry (point) for location
-- `bearing` - Heading in degrees
+- `bearing` - Course over ground in **radians** (0 to 2π, clockwise from north), computed at load time with PostGIS `ST_Azimuth` from the aircraft's previous position to the current one (NULL for the first position of each aircraft in a load). It is the direction between consecutive fixes, not the heading the aircraft reports. Use `DEGREES(bearing)` for degrees.
 - `registration` - Aircraft registration number
 - `typecode` - Aircraft type code
 - `category` - Aircraft category (e.g., "Airliner", "General Aviation", "UAV")
@@ -245,7 +245,7 @@ Query aircraft positions within a bounding box with optional filters.
 - `start_time` - ISO 8601 timestamp (e.g., `2024-01-01T00:00:00Z`)
 - `end_time` - ISO 8601 timestamp
 - `min_alt`, `max_alt` - Altitude range in feet
-- `min_bearing`, `max_bearing` - Bearing range in degrees (0-360)
+- `min_bearing`, `max_bearing` - Bearing range in **radians** (0 to 2π), compared directly with the stored column (the frontend converts its degree inputs before sending)
 - `min_speed`, `max_speed` - Ground speed range in knots
 - `military` - Filter military aircraft (`true`/`false`)
 - `category` - Aircraft category
@@ -266,7 +266,7 @@ Query aircraft positions within a bounding box with optional filters.
       "lon": -122.4194,
       "alt": 35000,
       "gs": 450.5,
-      "bearing": 270.5,
+      "bearing": 4.7211,
       "registration": "N12345",
       "typecode": "B738",
       "category": "Airliner",

@@ -168,8 +168,8 @@ def get_by_bbox():
     - end_time (optional): ISO 8601 timestamp (YYYY-MM-DDTHH:MM:SSZ)
     - min_alt (optional): Minimum altitude in feet
     - max_alt (optional): Maximum altitude in feet
-    - min_bearing (optional): Minimum bearing in degrees (0-360)
-    - max_bearing (optional): Maximum bearing in degrees (0-360)
+    - min_bearing (optional): Minimum bearing in radians (0 to 2*pi)
+    - max_bearing (optional): Maximum bearing in radians (0 to 2*pi)
     - min_speed (optional): Minimum speed in knots
     - max_speed (optional): Maximum speed in knots
     - military (optional): Filter for military aircraft (true/false)
@@ -405,8 +405,8 @@ def search_by_hex_list():
     - end_time (optional): ISO 8601 timestamp (YYYY-MM-DDTHH:MM:SSZ)
     - min_alt (optional): Minimum altitude in feet
     - max_alt (optional): Maximum altitude in feet
-    - min_bearing (optional): Minimum bearing in degrees (0-360)
-    - max_bearing (optional): Maximum bearing in degrees (0-360)
+    - min_bearing (optional): Minimum bearing in radians (0 to 2*pi)
+    - max_bearing (optional): Maximum bearing in radians (0 to 2*pi)
     - min_speed (optional): Minimum speed in knots
     - max_speed (optional): Maximum speed in knots
     - military (optional): Filter for military aircraft (true/false)
